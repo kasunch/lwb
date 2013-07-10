@@ -49,7 +49,7 @@ const uint8_t sync_leds[] = {6, 3, 0, 1, 2, 4, 5};
 #endif /* COOJA */
 #define NODE_ID_BITS                 9
 #define NODE_ID_MASK                 ((1 << NODE_ID_BITS) - 1)
-#define N_STREAMS_MAX              300
+#define N_STREAMS_MAX              100
 #define N_STREAM_REQS_MAX            4
 
 /*--------------------------------------------------------------------------*/
