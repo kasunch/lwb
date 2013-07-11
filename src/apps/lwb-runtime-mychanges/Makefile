@@ -6,6 +6,7 @@ CFLAGS += -D$(LWB_CONF)
 endif
 
 APPDIRS += ./configs
+CFLAGS += -DUART1_CONF_TX_WITH_INTERRUPT=0
 
 CONTIKI = ../..
 include $(CONTIKI)/Makefile.include
