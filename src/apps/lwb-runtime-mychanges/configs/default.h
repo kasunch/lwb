@@ -11,7 +11,7 @@
 // default configuration values
 #define N_NODES_MAX  220
 #define COOJA        0
-#define RF_CHANNEL   26
+#define RF_CHANNEL   15
 #define TINYOS       0
 #define LWB_DEBUG    0
 #define TX_POWER     31
