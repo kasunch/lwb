@@ -41,23 +41,15 @@ void prepare_data_packet(uint8_t free_slot) {
   if (!free_slot) {
     pkt_type |= DATA;
     data.en_on = energest_type_time(ENERGEST_TYPE_LISTEN) + energest_type_time(ENERGEST_TYPE_TRANSMIT);
-#if DSN_REMOVE_NODES
-    data.en_tot = energest_type_time(ENERGEST_TYPE_CPU) + energest_type_time(ENERGEST_TYPE_LPM) - en_on_to_remove;
-#else
+
     data.en_tot = energest_type_time(ENERGEST_TYPE_CPU) + energest_type_time(ENERGEST_TYPE_LPM);
-#endif /* DSN_REMOVE_NODES */
-#if USERINT_INT
-    data.low_ipi = low_ipi;
-    data.relay_cnt = (relay_cnt_cnt) ? ((relay_cnt_sum * RELAY_CNT_FACTOR) / relay_cnt_cnt) : (RELAY_CNT_INVALID);
-#endif /* USERINT_INT */
+
 #if LATENCY
     while (IS_LESS_EQ_THAN_TIME(data.gen_time + curr_ipi)) {
       data.gen_time += curr_ipi;
     }
 #endif /* LATENCY */
-#if MOBILE || USERINT_INT
-    data.n_rcvd_tot = my_n_rcvd_tot_last_round;
-#endif /* MOBILE */
+
 
 #if LWB_DEBUG && !COOJA
     data.relay_cnt = (relay_cnt_cnt) ?
@@ -79,13 +71,17 @@ void prepare_data_packet(uint8_t free_slot) {
   memcpy(pkt + DATA_HEADER_LENGTH + stream_reqs_len, &data, data_len);
 }
 
+//--------------------------------------------------------------------------------------------------
 void check_for_stream_requests(void) {
+
   if (GET_N_STREAM_REQS(pkt_type)) {
+
 #if JOINING_NODES
 #if DYNAMIC_FREE_SLOTS
     last_free_reqs_time = (uint16_t)time;
 #endif /* DYNAMIC_FREE_SLOTS */
 #endif /* JOINING_NODES */
+
     // check if we already processed stream requests from this node during this round
     uint8_t already_processed = 0;
     for (idx = 0; idx < stream_ack_idx; idx++) {
@@ -104,34 +100,28 @@ void check_for_stream_requests(void) {
         stream_ack_idx++;
       }
     }
+
   }
+
 }
+
+//--------------------------------------------------------------------------------------------------
 
 PT_THREAD(g_rr_host(struct rtimer *t, void *ptr)) {
   PT_BEGIN(&pt_rr);
 
   while (1) {
-#ifdef DSN_BOOTSTRAPPING
-    memset(&slots, 0, sizeof(slots));
-    slots_idx = 0;
-    slots_time = time;
-#endif /* DSN_BOOTSTRAPPING */
+
     for (slot_idx = 0; slot_idx < GET_N_SLOTS(N_SLOTS); slot_idx++) {
+
       leds_off(LEDS_ALL);
       SCHEDULE(T_REF, T_SYNC_ON + 3 * T_GAP + slot_idx * (T_RR_ON + T_GAP), g_rr_host);
       PT_YIELD(&pt_rr);
 
        leds_on(slot_idx + 1);
-#if COMPRESS
+
       if (snc[slot_idx] == 0) {
-#else
-      if (get_node_id_from_schedule(sched.slot, slot_idx + 1) == node_id) {
-#endif /* COMPRESS */
-#ifdef DSN_BOOTSTRAPPING
-        slots[slots_idx].id = stream_ack[0];
-        slots[slots_idx].type = 0;
-        slots_idx++;
-#endif /* DSN_BOOTSTRAPPING */
+        // We have stream ack to send
         data_header.node_id = node_id;
         pkt_type = STREAM_ACK;
         uint8_t stream_ack_len = stream_ack_idx * STREAM_ACK_LENGTH;
@@ -140,36 +130,41 @@ PT_THREAD(g_rr_host(struct rtimer *t, void *ptr)) {
         memcpy(pkt + DATA_HEADER_LENGTH, &stream_ack_idx, STREAM_ACK_IDX_LENGTH);
         memcpy(pkt + DATA_HEADER_LENGTH + STREAM_ACK_IDX_LENGTH, stream_ack, stream_ack_len);
         save_energest_values();
-        glossy_start((uint8_t *)pkt, pkt_len, GLOSSY_INITIATOR, GLOSSY_NO_SYNC, N_RR, pkt_type,
-            T_REF + T_SYNC_ON + (slot_idx + 1) * (T_RR_ON + T_GAP) + 2 * T_GAP, (rtimer_callback_t)g_rr_host, &rt, NULL);
+
+        glossy_start((uint8_t *)pkt,
+                     pkt_len,
+                     GLOSSY_INITIATOR,
+                     GLOSSY_NO_SYNC,
+                     N_RR,
+                     pkt_type,
+                     T_REF + T_SYNC_ON + (slot_idx + 1) * (T_RR_ON + T_GAP) + 2 * T_GAP,
+                     (rtimer_callback_t)g_rr_host, &rt, NULL);
       } else {
-        glossy_start((uint8_t *)pkt, 0, GLOSSY_RECEIVER, GLOSSY_NO_SYNC, N_RR, 0,
-            T_REF + T_SYNC_ON + (slot_idx + 1) * (T_RR_ON + T_GAP) + 2 * T_GAP, (rtimer_callback_t)g_rr_host, &rt, NULL);
+
+        glossy_start((uint8_t *)pkt,
+                     0,
+                     GLOSSY_RECEIVER,
+                     GLOSSY_NO_SYNC,
+                     N_RR,
+                     0,
+                     T_REF + T_SYNC_ON + (slot_idx + 1) * (T_RR_ON + T_GAP) + 2 * T_GAP,
+                     (rtimer_callback_t)g_rr_host, &rt, NULL);
       }
+
       PT_YIELD(&pt_rr);
 
       uint8_t rcvd = !!glossy_stop();
-#if COMPRESS
+
       if (snc[slot_idx] == 0) {
-#else
-      if (get_node_id_from_schedule(sched.slot, slot_idx + 1) == node_id) {
-#endif /* COMPRESS */
+        // we just sent a stream ack
         update_control_dc();
         memset(stream_ack, 0, STREAM_ACK_LENGTH);
         stream_ack_idx = 0;
-      } else {
-#if COMPRESS
-        uint16_t id = snc[slot_idx];
-#else
-        uint16_t id = get_node_id_from_schedule(sched.slot, slot_idx + 1);
-#endif /* COMPRESS */
-        n_tot[id]++;
-#ifdef DSN_BOOTSTRAPPING
-        slots[slots_idx].id = id;
-        slots[slots_idx].type = 1;
-        slots_idx++;
-#endif /* DSN_BOOTSTRAPPING */
 
+      } else {
+        // Probably, this packet is a data packet
+        uint16_t id = snc[slot_idx];
+        n_tot[id]++;
         // get the data header
         memcpy(&data_header, pkt, DATA_HEADER_LENGTH);
         pkt_type = get_header();
@@ -177,34 +172,29 @@ PT_THREAD(g_rr_host(struct rtimer *t, void *ptr)) {
         if (rcvd && (id == data_header.node_id)) {
           if (is_sink) {
             n_rcvd[id]++;
-#if MOBILE || USERINT_INT
-            my_n_rcvd_tot++;
-#endif /* MOBILE */
           }
+
+          /// @note Kasun: I don't understand this
 #if REMOVE_NODES
-#if COMPRESS
           streams[((first_snc + slot_idx - 2 * ack_snc) % (GET_N_SLOTS(N_SLOTS) - ack_snc)) + ack_snc]->n_cons_missed = 0;
-#else
-          streams[slot_idx + 1]->n_cons_missed = 0;
-#endif /* COMPRESS */
 #endif /* REMOVE_NODES */
+
+          // Stream requests can be piggybacked on data packets
+          // So, we copy any available stream requests to stream_reqs.
           memcpy(stream_reqs, pkt + DATA_HEADER_LENGTH, GET_N_STREAM_REQS(pkt_type) * STREAM_REQ_LENGTH);
           check_for_stream_requests();
+
+          // Check whether we actually have data in the packet
           if (IS_THERE_DATA(pkt_type) && is_sink) {
+            // We have data.
             memcpy(&data, pkt + DATA_HEADER_LENGTH + GET_N_STREAM_REQS(pkt_type) * STREAM_REQ_LENGTH, IS_THERE_DATA(pkt_type) * DATA_LENGTH);
-#if DSN_TRAFFIC_FLUCTUATIONS || DSN_INTERFERENCE || DSN_REMOVE_NODES || USERINT_INT
-            en_on[id] = data.en_on;
-            en_tot[id] = data.en_tot;
-            rc[id] = data.relay_cnt;
-#else
+
             dc[id] = (uint16_t)((10000LLU * data.en_on) / data.en_tot);
-#endif /* DSN_TRAFFIC_FLUCTUATIONS */
+
 #if LATENCY
             lat[id] += (TIME - data.gen_time);
 #endif /* LATENCY */
-#if MOBILE || USERINT_INT
-            n_rcvd_tot[id] = data.n_rcvd_tot;
-#endif /* MOBILE */
+
 #if LWB_DEBUG && !COOJA
             rc[id] = data.relay_cnt;
 #if CONTROL_DC
@@ -214,26 +204,27 @@ PT_THREAD(g_rr_host(struct rtimer *t, void *ptr)) {
           }
         } else {
         }
-#if FLASH
-        flash_dy.node_id = id;
-        flash_dy.time = time;
-        flash_dy.n_rcvd = n_rcvd[id];
-        flash_dy.n_tot = n_tot[id];
-        xmem_pwrite(&flash_dy, sizeof(flash_dy), FLASH_OFFSET + flash_idx * sizeof(flash_dy));
-        flash_idx++;
-#endif /* FLASH */
+
       }
     }
-#if JOINING_NODES
+
+    // Contention slots. Now, we are receiving stream requests from other nodes.
     for (; slot_idx < GET_N_SLOTS(N_SLOTS) + GET_N_FREE(N_SLOTS); slot_idx++) {
+
       leds_off(LEDS_ALL);
       SCHEDULE(T_REF, T_SYNC_ON + 3 * T_GAP + slot_idx * (T_RR_ON + T_GAP), g_rr_host);
       PT_YIELD(&pt_rr);
 
       leds_on(slot_idx + 1);
       save_energest_values();
-      glossy_start((uint8_t *)pkt, 0, GLOSSY_RECEIVER, GLOSSY_NO_SYNC, N_RR, 0,
-          T_REF + T_SYNC_ON + (slot_idx) * (T_RR_ON + T_GAP) + 3 * T_GAP + T_FREE_ON, (rtimer_callback_t)g_rr_host, &rt, NULL);
+      glossy_start((uint8_t *)pkt,
+                   0,
+                   GLOSSY_RECEIVER,
+                   GLOSSY_NO_SYNC,
+                   N_RR,
+                   0,
+                   T_REF + T_SYNC_ON + (slot_idx) * (T_RR_ON + T_GAP) + 3 * T_GAP + T_FREE_ON,
+                   (rtimer_callback_t)g_rr_host, &rt, NULL);
       PT_YIELD(&pt_rr);
 
       if (glossy_stop() && ((get_data_len() - DATA_HEADER_LENGTH) % STREAM_REQ_LENGTH == 0)) {
@@ -242,39 +233,18 @@ PT_THREAD(g_rr_host(struct rtimer *t, void *ptr)) {
         pkt_type = get_header();
         memcpy(stream_reqs, pkt + DATA_HEADER_LENGTH, GET_N_STREAM_REQS(pkt_type) * STREAM_REQ_LENGTH);
         check_for_stream_requests();
-#ifdef DSN_BOOTSTRAPPING
-        slots[slots_idx].id = data_header.node_id;
-        slots[slots_idx].type = 2;
-        slots_idx++;
-#endif /* DSN_BOOTSTRAPPING */
+
       }
-#ifdef DSN_BOOTSTRAPPING
-      else {
-        slots[slots_idx].id = 0;
-        slots[slots_idx].type = 2;
-        slots_idx++;
-      }
-#endif /* DSN_BOOTSTRAPPING */
+
       update_control_dc();
     }
-#endif /* JOINING_NODES */
-#if (LWB_DEBUG && (FAIRNESS || COOJA)) || KANSEI_SCALABILITY
+
+#if (LWB_DEBUG && (FAIRNESS || COOJA))
     process_poll(&print);
 #endif /* LWB_DEBUG && (FAIRNESS || COOJA) */
-#if FLASH
-    flash_dy.node_id = 0;
-    flash_dy.time = time;
-    flash_dy.n_rcvd = 0;
-    flash_dy.n_tot = 0;
-    xmem_pwrite(&flash_dy, sizeof(flash_dy), FLASH_OFFSET + flash_idx * sizeof(flash_dy));
-    flash_idx++;
-#endif /* FLASH */
+
     compute_schedule();
-#ifdef DSN_BOOTSTRAPPING
-    if (period == 1) {
-      process_poll(&print);
-    }
-#endif /* DSN_BOOTSTRAPPING */
+
     // schedule g_sync in 1 second
     if (period == 1) {
       // use t_start as the reference point
@@ -290,161 +260,97 @@ PT_THREAD(g_rr_host(struct rtimer *t, void *ptr)) {
 }
 
 
+//--------------------------------------------------------------------------------------------------
 PT_THREAD(g_rr_source(struct rtimer *t, void *ptr)) {
   PT_BEGIN(&pt_rr);
 
   while (1) {
+
+    // Iterate through all the data slots in the round.
     for (slot_idx = 0; slot_idx < GET_N_SLOTS(N_SLOTS); slot_idx++) {
+
       leds_off(LEDS_ALL);
       SCHEDULE(T_REF, T_SYNC_ON + 3 * T_GAP + slot_idx * (T_RR_ON + T_GAP), g_rr_source);
       PT_YIELD(&pt_rr);
 
       leds_on(slot_idx + 1);
-#if COMPRESS
-      if (snc[slot_idx] == node_id) {
-#else
-      if (get_node_id_from_schedule(sched.slot, slot_idx + 1) == node_id) {
-#endif /* COMPRESS */
-        prepare_data_packet(0);
-        glossy_start((uint8_t *)pkt, pkt_len, GLOSSY_INITIATOR, GLOSSY_NO_SYNC, N_RR, pkt_type,
-            T_REF + T_SYNC_ON + (slot_idx + 1) * (T_RR_ON + T_GAP) + 2 * T_GAP, (rtimer_callback_t)g_rr_source, &rt, NULL);
-//#if JOINING_NODES
-//          joining_state = JOINED;
-//#endif /* JOINING_NODES */
-        PT_YIELD(&pt_rr);
 
+      if (snc[slot_idx] == node_id) {
+        // This is our slot. So we start Glossy as an initiator.
+        prepare_data_packet(0);
+        glossy_start((uint8_t *)pkt,
+                     pkt_len,
+                     GLOSSY_INITIATOR,
+                     GLOSSY_NO_SYNC,
+                     N_RR,
+                     pkt_type,
+                     T_REF + T_SYNC_ON + (slot_idx + 1) * (T_RR_ON + T_GAP) + 2 * T_GAP,
+                     (rtimer_callback_t)g_rr_source, &rt, NULL);
+
+        PT_YIELD(&pt_rr);
         glossy_stop();
       } else {
-        uint8_t participate;
-#if STATIC
-#if COMPRESS
-        stream_info *curr_stream = get_stream_from_id(snc[slot_idx]);
-#else
-        stream_info *curr_stream = get_stream_from_id(get_node_id_from_schedule(sched.slot, slot_idx + 1));
-#endif /* COMPRESS */
-        if (curr_stream == NULL) {
-          participate = 1;
-        } else {
-          uint8_t remote_relay_cnt = curr_stream->stream_id;
-          if ((remote_relay_cnt == 0xff) || (relay_cnt_cnt <= AVG_RELAY_CNT_UPDATE / 2)) {
-            participate = 1;
-          } else {
-            uint8_t local_relay_cnt = (relay_cnt_sum * RELAY_CNT_FACTOR) / relay_cnt_cnt;
-            if (local_relay_cnt < remote_relay_cnt) {
-              participate = 1;
-            } else {
-              if (local_relay_cnt >= remote_relay_cnt + RELAY_CNT_FACTOR) {
-                participate = 0;
-              } else {
-                if ((random_rand() % RELAY_CNT_FACTOR) > (local_relay_cnt - remote_relay_cnt)) {
-                  participate = 1;
-                } else {
-                  participate = 0;
-                }
-              }
-            }
-          }
-        }
-#else
-          participate = 1;
-#endif /* STATIC */
-        if (participate) {
+        // This is not our slot. We just participate to the Glossy flooding.
           save_energest_values();
-          glossy_start((uint8_t *)pkt, 0, GLOSSY_RECEIVER, GLOSSY_NO_SYNC, N_RR, 0,
-              T_REF + T_SYNC_ON + (slot_idx + 1) * (T_RR_ON + T_GAP) + 2 * T_GAP, (rtimer_callback_t)g_rr_source, &rt, NULL);
+          glossy_start((uint8_t *)pkt,
+                       0,
+                       GLOSSY_RECEIVER,
+                       GLOSSY_NO_SYNC,
+                       N_RR,
+                       0,
+                       T_REF + T_SYNC_ON + (slot_idx + 1) * (T_RR_ON + T_GAP) + 2 * T_GAP,
+                       (rtimer_callback_t)g_rr_source, &rt, NULL);
+
           PT_YIELD(&pt_rr);
 
           if (glossy_stop()) {
-            // get the data header
+            // We successfully received Glossy flooding.
             memcpy(&data_header, pkt, DATA_HEADER_LENGTH);
             pkt_type = get_header();
             if (IS_STREAM_ACK(pkt_type)) {
+              // This packet is an stream acknowledgment.
               update_control_dc();
               memcpy(&stream_ack_idx, pkt + DATA_HEADER_LENGTH, STREAM_ACK_IDX_LENGTH);
               memcpy(stream_ack, pkt + DATA_HEADER_LENGTH + STREAM_ACK_IDX_LENGTH, stream_ack_idx * STREAM_ACK_LENGTH);
               for (idx = 0; idx < stream_ack_idx; idx++) {
-#if JOINING_NODES
                 if (stream_ack[idx] == node_id) {
                   n_stream_reqs--;
                   if (n_stream_reqs == 0) {
+                    // All the stream requests are acknowledged.
+                    // Horray, we joined
                     joining_state = JOINED;
                   }
                   curr_ipi = stream_reqs[0].ipi;
-#if LATENCY
-                  data.gen_time = stream_reqs[0].time_info - curr_ipi;
-#endif /* LATENCY */
                 }
-#endif /* JOINING_NODES */
               }
-            } else {
-              uint16_t id = data_header.node_id;
-#if COMPRESS
-              if (id == snc[slot_idx]) {
-#else
-              if (id == get_node_id_from_schedule(sched.slot, slot_idx + 1)) {
-#endif /* COMPRESS */
-                if (is_sink) {
-                  // packet correctly received from a source node
-                  n_rcvd[id]++;
-#if MOBILE || USERINT_INT
-                  my_n_rcvd_tot++;
-#endif /* MOBILE */
-                }
-                if (IS_THERE_DATA(pkt_type) && is_sink) {
-                  memcpy(&data, pkt + DATA_HEADER_LENGTH + GET_N_STREAM_REQS(pkt_type) * STREAM_REQ_LENGTH, IS_THERE_DATA(pkt_type) * DATA_LENGTH);
-#if DSN_TRAFFIC_FLUCTUATIONS || DSN_INTERFERENCE || DSN_REMOVE_NODES || USERINT_INT
-                  en_on[id] = data.en_on;
-                  en_tot[id] = data.en_tot;
-#if USERINT_INT
-                  if (IS_MOBILE_NODE && id == USERINT_NODE) {
-                    if (data.low_ipi != low_ipi && n_stream_reqs == 0) {
-                      if (low_ipi) {
-                        stream_reqs[n_stream_reqs].req_type = SET_STREAM_ID(2) | (DEL_STREAM & 0x3);
-                        low_ipi = 0;
-                      } else {
-                        stream_reqs[n_stream_reqs].ipi = LOW_IPI;
-                        stream_reqs[n_stream_reqs].req_type = SET_STREAM_ID(2) | (REP_STREAM & 0x3);
-                        low_ipi = 1;
-                      }
-                      leds_toggle(LEDS_BLUE);
-                      stream_reqs[n_stream_reqs].time_info = TIME;
-                      n_stream_reqs++;
-#if JOINING_NODES
-                      joining_state = NOT_JOINED;
-#endif /* JOINING_NODES */
-                    }
-                  }
-#endif /* USERINT_INT */
-#else
-                  dc[id] = (uint16_t)((10000LLU * data.en_on) / data.en_tot);
-#endif /* DSN_TRAFFIC_FLUCTUATIONS */
-#if LWB_DEBUG && !COOJA
-                  rc[id] = data.relay_cnt;
-#if CONTROL_DC
-                  dc_control[id] = (uint16_t)((10000LLU * data.en_control) / data.en_tot);
-#endif /* CONTROL_DC */
-#endif /* LWB_DEBUG && !COOJA */
-#if MOBILE || USERINT_INT
-                  n_rcvd_tot[id] = data.n_rcvd_tot;
-#endif /* MOBILE */
-                }
-#if STATIC
-                stream_info *curr_stream = get_stream_from_id(id);
-                if (curr_stream == NULL) {
-                  add_relay_cnt(id, data_header.relay_cnt);
-                } else {
-                  curr_stream->stream_id = data_header.relay_cnt;
-                }
-#endif /* STATIC */
-              }
+            } else if (IS_THERE_DATA(pkt_type)){
+              // This is a data packet
+              /// @todo Add this data packet to a queue and poll TCPIP process
+                uint16_t id = data_header.node_id;
+//
+//              if (id == snc[slot_idx]) {
+//                if (is_sink) {
+//                  // packet correctly received from a source node
+                n_rcvd[id]++;
+//
+//                }
+//                if (IS_THERE_DATA(pkt_type) && is_sink) {
+//                  memcpy(&data, pkt + DATA_HEADER_LENGTH + GET_N_STREAM_REQS(pkt_type) * STREAM_REQ_LENGTH, IS_THERE_DATA(pkt_type) * DATA_LENGTH);
+//
+//                  dc[id] = (uint16_t)((10000LLU * data.en_on) / data.en_tot);
+//
+//                }
+//              }
             }
+          } else {
+            // We haven't received Glossy flooding.
           }
-        }
       }
     }
-#if JOINING_NODES
+    // We've iterated through all the data/ack slots. Now it is time for contention slots
     for (; slot_idx < GET_N_SLOTS(N_SLOTS) + GET_N_FREE(N_SLOTS); slot_idx++) {
       leds_off(LEDS_ALL);
+      // schedule Glossy for next slot.
       SCHEDULE(T_REF, T_SYNC_ON + 3 * T_GAP + slot_idx * (T_RR_ON + T_GAP), g_rr_source);
       PT_YIELD(&pt_rr);
 
@@ -456,40 +362,53 @@ PT_THREAD(g_rr_source(struct rtimer *t, void *ptr)) {
           joining_state = JUST_TRIED;
           prepare_data_packet(1);
           save_energest_values();
-          glossy_start((uint8_t *)pkt, pkt_len, GLOSSY_INITIATOR, GLOSSY_NO_SYNC, N_RR, pkt_type,
-              T_REF + T_SYNC_ON + (slot_idx + 1) * (T_RR_ON + T_GAP) + 2 * T_GAP, (rtimer_callback_t)g_rr_source, &rt, NULL);
+          glossy_start((uint8_t *)pkt,
+                       pkt_len,
+                       GLOSSY_INITIATOR,
+                       GLOSSY_NO_SYNC,
+                       N_RR,
+                       pkt_type,
+                       T_REF + T_SYNC_ON + (slot_idx + 1) * (T_RR_ON + T_GAP) + 2 * T_GAP,
+                       (rtimer_callback_t)g_rr_source, &rt, NULL);
         } else {
           // keep waiting, decrease the number of rounds to wait
           rounds_to_wait--;
           save_energest_values();
-          glossy_start((uint8_t *)pkt, 0, GLOSSY_RECEIVER, GLOSSY_NO_SYNC, N_RR, 0,
-              T_REF + T_SYNC_ON + (slot_idx + 1) * (T_RR_ON + T_GAP) + 2 * T_GAP, (rtimer_callback_t)g_rr_source, &rt, NULL);
+          glossy_start((uint8_t *)pkt,
+                       0,
+                       GLOSSY_RECEIVER,
+                       GLOSSY_NO_SYNC,
+                       N_RR,
+                       0,
+                       T_REF + T_SYNC_ON + (slot_idx + 1) * (T_RR_ON + T_GAP) + 2 * T_GAP,
+                       (rtimer_callback_t)g_rr_source, &rt, NULL);
         }
       } else {
         // already joined or not SYNCED
         save_energest_values();
-        glossy_start((uint8_t *)pkt, 0, GLOSSY_RECEIVER, GLOSSY_NO_SYNC, N_RR, 0,
-            T_REF + T_SYNC_ON + (slot_idx) * (T_RR_ON + T_GAP) + 3 * T_GAP + T_FREE_ON, (rtimer_callback_t)g_rr_source, &rt, NULL);
+        glossy_start((uint8_t *)pkt,
+                     0,
+                     GLOSSY_RECEIVER,
+                     GLOSSY_NO_SYNC,
+                     N_RR,
+                     0,
+                     T_REF + T_SYNC_ON + (slot_idx) * (T_RR_ON + T_GAP) + 3 * T_GAP + T_FREE_ON,
+                     (rtimer_callback_t)g_rr_source, &rt, NULL);
       }
       PT_YIELD(&pt_rr);
 
       glossy_stop();
       update_control_dc();
     }
-#endif /* JOINING_NODES */
 #if LWB_DEBUG
     if (slot_idx < 30) {
       process_poll(&print);
     }
 #endif /* LWB_DEBUG */
-//#if MOBILE
-//    process_poll(&print);
-//#endif /* MOBILE */
-#if !DSN_REMOVE_NODES
+
     // schedule g_sync in 1 second
     SCHEDULE(T_REF, PERIOD_RT(1) - T_guard, g_sync);
     SYNC_LEDS();
-#endif /* !DSN_REMOVE_NODES */
 
 #if FAIRNESS
     if (is_source && time >= (uint32_t)INIT_DELAY * TIME_SCALE) {
@@ -518,58 +437,10 @@ PT_THREAD(g_rr_source(struct rtimer *t, void *ptr)) {
     }
 #endif /* FAIRNESS */
 
-#if MOBILE || USERINT_INT
-    my_n_rcvd_tot_last_round = my_n_rcvd_tot;
-#endif /* MOBILE */
     // copy the current schedule to old_sched
     old_sched = sched;
     // erase the schedule before the receiving the next one
     memset((uint8_t *)&sched.slot, 0, sizeof(sched.slot));
-
-#if DSN_TRAFFIC_FLUCTUATIONS
-    if (is_peak_node) {
-      for (idx = 0; idx < sizeof(ipis) / 2; idx++) {
-        if (time >= t_change_ipi[idx] && time < t_change_ipi[idx+1]) {
-          if (curr_ipi != ipis[idx]) {
-            n_stream_reqs = 1;
-            stream_reqs[0].req_type = SET_STREAM_ID(1) | (REP_STREAM & 0x3);
-#if JOINING_NODES
-            joining_state = NOT_JOINED;
-#endif /* JOINING_NODES */
-            stream_reqs[0].ipi = ipis[idx];
-            stream_reqs[0].time_info = t_change_ipi[idx];
-          }
-          break;
-        }
-      }
-    }
-#endif /* DSN_TRAFFIC_FLUCTUATIONS */
-#if DSN_REMOVE_NODES
-    if (is_node_to_remove) {
-      for (idx = 0; idx < sizeof(t_remove) / 2; idx++) {
-        if (time >= t_remove[idx] && time < t_add[idx]) {
-          leds_off(LEDS_ALL);
-          sync_state = BOOTSTRAP;
-          skew = 0;
-          n_stream_reqs = 1;
-          stream_reqs[0].req_type = SET_STREAM_ID(1) | (REP_STREAM & 0x3);
-#if JOINING_NODES
-          joining_state = NOT_JOINED;
-#endif /* JOINING_NODES */
-          stream_reqs[0].ipi = INIT_IPI;
-          stream_reqs[0].time_info = t_add[idx];
-          uint32_t T_sleep = (t_add[idx] - t_remove[idx]) + (random_rand() % period);
-          SCHEDULE_L(T_REF, PERIOD_RT(T_sleep), g_sync);
-          en_on_to_remove += T_sleep << 15;
-          goto yield;
-        }
-      }
-    }
-    // schedule g_sync in 1 second
-    SCHEDULE(T_REF, PERIOD_RT(1) - T_guard, g_sync);
-    SYNC_LEDS();
-yield:
-#endif /* DSN_REMOVE_NODES */
 
     PT_YIELD(&pt_rr);
   }

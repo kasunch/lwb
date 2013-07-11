@@ -45,30 +45,14 @@ static uint16_t n_tot[N_NODES_MAX];
 #if LATENCY
 static uint16_t lat[N_NODES_MAX];
 #endif /* LATENCY */
-#if MOBILE || USERINT_INT
-static uint16_t n_rcvd_tot[N_NODES_MAX];
-static uint16_t my_n_rcvd_tot, my_n_rcvd_tot_last_round;
-#endif /* MOBILE */
-#if DSN_TRAFFIC_FLUCTUATIONS || DSN_INTERFERENCE || DSN_REMOVE_NODES || USERINT_INT
-static uint32_t en_on[N_NODES_MAX];
-static uint32_t en_tot[N_NODES_MAX];
-static uint8_t  rc[N_NODES_MAX];
-#else
+
 static uint16_t dc[N_NODES_MAX];
-#endif /* DSN_TRAFFIC_FLUCTUATIONS */
+
 #if LWB_DEBUG && !COOJA
 static uint16_t dc_control[N_NODES_MAX];
 static uint8_t  rc[N_NODES_MAX];
 #endif /* LWB_DEBUG && !COOJA */
-#ifdef DSN_BOOTSTRAPPING
-typedef struct {
-  uint16_t id;
-  uint8_t type;
-} slot_type;
-static slot_type slots[100];
-static uint8_t slots_idx;
-static uint16_t slots_time;
-#endif /* DSN_BOOTSTRAPPING */
+
 
 void set_hosts_sinks_sources(void) {
   // initialize arrays for statistics on received packets
@@ -118,30 +102,37 @@ LIST(streams_list);
 static stream_info *streams[N_SLOTS_MAX];
 #endif /* REMOVE_NODES */
 
-#if COMPRESS
-static uint16_t snc[N_SLOTS_MAX], snc_tmp[N_SLOTS_MAX];
-static uint8_t  first_snc, ack_snc;
-#endif /* COMPRESS */
 
-#define TIME       sched.time
-#define PERIOD     sched.T
-#define N_SLOTS    sched.n_slots
-#define OLD_PERIOD old_sched.T
+static uint16_t snc[N_SLOTS_MAX];     ///<  Contains the node IDs related to slots. Zero means the slot belongs to host.
+static uint16_t snc_tmp[N_SLOTS_MAX];
+
+static uint8_t  first_snc, ack_snc;
+
+#define TIME       sched.time     ///< Starting time of the schedule.
+#define PERIOD     sched.T        ///< Round period (time between two rounds) in current schedule.
+#define N_SLOTS    sched.n_slots  ///< Number of slots in current schedule.
+#define OLD_PERIOD old_sched.T    ///< Previous round period.
 
 #define PERIOD_RT(T)     ((T) * (uint32_t)RTIMER_SECOND + ((int32_t)((T) * skew) / (int32_t)64))
 
 static struct rtimer rt;
 static struct pt pt_sync, pt_rr;
-static sched_struct sched, old_sched;
+
+static sched_struct sched;      ///< Current schedule
+static sched_struct old_sched;  ///< Old schedules. This may not be the previous one.
+
 static data_struct data;
 static data_header_struct data_header;
-static stream_req stream_reqs[N_STREAM_REQS_MAX];
-static uint8_t n_stream_reqs;
+
+static stream_req stream_reqs[N_STREAM_REQS_MAX]; ///< To store piggybacked stream requests
+static uint8_t n_stream_reqs;                     ///< Number of stream requests
 
 static rtimer_clock_t t_start = 0;
 static uint8_t sched_size;
+
 static uint16_t stream_ack[N_SLOTS_MAX];
 static uint8_t stream_ack_idx;
+
 #define STREAM_ACK_LENGTH 2
 #define STREAM_ACK_IDX_LENGTH 1
 
@@ -198,28 +189,6 @@ static uint16_t relay_cnt_sum;
 
 static rtimer_clock_t T_guard;
 
-#if DSN_TRAFFIC_FLUCTUATIONS
-static const uint16_t peak_nodes[] = PEAK_NODES;
-static const uint16_t t_change_ipi[] = T_CHANGE_IPI;
-static const uint16_t ipis[] = IPIs;
-static uint8_t is_peak_node = 0;
-#endif /* DSN_TRAFFIC_FLUCTUATIONS */
-#if DSN_REMOVE_NODES
-static const uint16_t nodes_to_remove[] = NODES_TO_REMOVE;
-static const uint16_t t_remove[] = T_REMOVE;
-static const uint16_t t_add[] = T_ADD;
-static uint8_t is_node_to_remove = 0;
-static uint32_t en_on_to_remove = 0;
-#endif /* DSN_REMOVE_NODES */
-#if USERINT_INT
-static uint16_t low_ipi = 0;
-#endif /* USERINT_INT */
-
-#if FLASH
-static flash_struct_dy   flash_dy;
-static flash_struct_dc   flash_dc;
-static uint32_t flash_idx = 0;
-#endif /* FLASH */
 
 uint16_t get_node_id_from_schedule(uint8_t *sched, uint16_t pos) {
   uint16_t id;
@@ -281,34 +250,6 @@ PROCESS_THREAD(lwb_init, ev, data)
   process_start(&print, NULL);
   process_start(&glossy_process, NULL);
 
-#if DSN_TRAFFIC_FLUCTUATIONS
-  for (idx = 0; idx < sizeof(peak_nodes) / 2; idx++) {
-    if (node_id == peak_nodes[idx]) {
-      is_peak_node = 1;
-      break;
-    }
-  }
-#endif /* DSN_TRAFFIC_FLUCTUATIONS */
-#if DSN_REMOVE_NODES
-  for (idx = 0; idx < sizeof(nodes_to_remove) / 2; idx++) {
-    if (node_id == nodes_to_remove[idx]) {
-      is_node_to_remove = 1;
-      break;
-    }
-  }
-#endif /* DSN_REMOVE_NODES */
-
-#if FLASH && !COOJA
-  etimer_set(&et, 2 * CLOCK_SECOND);
-  PROCESS_YIELD_UNTIL(etimer_expired(&et));
-
-  xmem_erase(FLASH_SIZE, FLASH_OFFSET);
-
-  etimer_set(&et, 2 * CLOCK_SECOND);
-  PROCESS_YIELD_UNTIL(etimer_expired(&et));
-  energest_init();
-#endif /* FLASH && !COOJA */
-
   if (is_host) {
     scheduler_init();
     SCHEDULE_L(RTIMER_NOW() - 10, INIT_PERIOD * (uint32_t)RTIMER_SECOND, g_sync);
@@ -332,22 +273,14 @@ PROCESS_THREAD(lwb_init, ev, data)
     SCHEDULE_L(RTIMER_NOW() - 10, INIT_PERIOD * (uint32_t)(random_rand() % RTIMER_SECOND), g_sync);
   }
 
-#if USERINT_INT
-  if (node_id == USERINT_NODE) {
-    ENABLE_USERINT_INT();
-    low_ipi = 0;
-  }
-#endif /* USERINT_INT */
-
   if (INIT_DELAY) {
     // set timer to reset energest values
     etimer_set(&et, INIT_DELAY * CLOCK_SECOND);
     PROCESS_YIELD_UNTIL(etimer_expired(&et));
 
-#if !USERINT_INT
     energest_init();
     ENERGEST_ON(ENERGEST_TYPE_CPU);
-#endif /* !USERINT_INT */
+
 #if CONTROL_DC
     en_control = 0;
 #endif /* CONTROL_DC */
@@ -355,25 +288,3 @@ PROCESS_THREAD(lwb_init, ev, data)
 
   PROCESS_END();
 }
-
-#if USERINT_INT
-interrupt(PORT2_VECTOR) irq_p2(void) {
-  ENERGEST_ON(ENERGEST_TYPE_IRQ);
-  if (low_ipi) {
-    stream_reqs[n_stream_reqs].req_type = SET_STREAM_ID(2) | (DEL_STREAM & 0x3);
-    low_ipi = 0;
-  } else {
-    stream_reqs[n_stream_reqs].ipi = LOW_IPI;
-    stream_reqs[n_stream_reqs].req_type = SET_STREAM_ID(2) | (REP_STREAM & 0x3);
-    low_ipi = 1;
-  }
-  leds_toggle(LEDS_BLUE);
-  stream_reqs[n_stream_reqs].time_info = TIME;
-  n_stream_reqs++;
-#if JOINING_NODES
-  joining_state = NOT_JOINED;
-#endif /* JOINING_NODES */
-  P2IFG = 0;
-  ENERGEST_OFF(ENERGEST_TYPE_IRQ);
-}
-#endif /* USERINT_INT */

@@ -20,19 +20,22 @@
 #define DYNAMIC_FREE_SLOTS           1
 #define TWO_SCHEDS                   1
 #define CONTROL_DC                   1
+
 #ifndef TIME_SCALE
 #define TIME_SCALE                   1
 #endif /* TIME_SCALE */
 
+/// @brief Synchronization states
 enum {
-  BOOTSTRAP,
-  QUASI_SYNCED,
-  SYNCED,
-  ALREADY_SYNCED,
-  UNSYNCED_1,
-  UNSYNCED_2,
-  UNSYNCED_3,
+  BOOTSTRAP,      ///< Initial state. Not synchronized
+  QUASI_SYNCED,   ///< Received schedule when in BOOTSTRAP state. Clock drift is not estimated.
+  SYNCED,         ///< Received schedule and clock drift is estimated.
+  ALREADY_SYNCED, ///< @note Kasun: Still no idea why this is
+  UNSYNCED_1,     ///< Missed schedule one time.
+  UNSYNCED_2,     ///< Missed schedule two times.
+  UNSYNCED_3,     ///< Missed schedule three times.
 } sync_states;
+
 const uint8_t sync_leds[] = {6, 3, 0, 1, 2, 4, 5};
 
 /*--------------------------------------------------------------------------*/
@@ -54,11 +57,9 @@ const uint8_t sync_leds[] = {6, 3, 0, 1, 2, 4, 5};
 
 /*--------------------------------------------------------------------------*/
 #if TWO_SCHEDS
-#if KANSEI_SCALABILITY && (INIT_IPI == 5)
-#define N_SYNC                      5
-#else
+
 #define N_SYNC                      3
-#endif /* KANSEI_SCALABILITY && (INIT_IPI == 5) */
+
 #if LONG_SLOTS
 #define T_SYNC_ON                   (RTIMER_SECOND / 33)           //  30 ms
 #elif SHORT_SLOTS
@@ -103,14 +104,8 @@ typedef struct {
 #if LATENCY
   uint16_t gen_time;
 #endif /* LATENCY */
-#if MOBILE
-  uint16_t n_rcvd_tot;
-#endif /* MOBILE */
-#if USERINT_INT
-  uint8_t low_ipi;
-  uint8_t relay_cnt;
-  uint16_t n_rcvd_tot;
-#endif /* USERINT_INT */
+
+
 #if !COOJA
 #if LWB_DEBUG
   uint32_t en_control;
@@ -167,24 +162,17 @@ typedef struct stream_info {
 #endif /* REMOVE_NODES */
 } stream_info;
 
+/// @brief Structure for schedule information
 typedef struct {
-#if COMPRESS
-  uint16_t host_id;
-#endif /* COMPRESS */
-  uint16_t time;
-  uint8_t  n_slots;
-  uint8_t  T;
-#if COMPRESS
+  uint16_t host_id;     ///< ID of the host
+  uint16_t time;        ///< Duration of the round @note Kasun: Not sure
+  uint8_t  n_slots;     ///< Number of slots in the round
+  uint8_t  T;           ///< Round period (duration between beginning of two rounds)
   uint8_t  slot[120];
-#else
-  uint8_t  slot[(N_SLOTS_MAX * NODE_ID_BITS) / 8 + 1];
-#endif /* COMPRESS */
 } sched_struct;
-#if COMPRESS
+
 #define SYNC_HEADER_LENGTH 6
-#else
-#define SYNC_HEADER_LENGTH 4
-#endif /* COMPRESS */
+
 
 #if COOJA
 #define N_RR                        2
@@ -233,32 +221,6 @@ enum {
 #define N_CONS_MISSED_MAX          10
 #endif /* REMOVE_NODES */
 
-#if USERINT_INT
-#define IS_USERINT_SET() (P2IN & BV(7))
-#define ENABLE_USERINT_INT() do { \
-  P2SEL &= ~BV(7); \
-  P2DIR &= ~BV(7); \
-  P2IES |= BV(7); \
-  P2IFG = 0; \
-  P2IE |= BV(7); \
-} while (0)
-#endif /* USERINT_INT */
-
-#if FLASH
-#define FLASH_OFFSET (1 * XMEM_ERASE_UNIT_SIZE)
-#define FLASH_SIZE   (14 * XMEM_ERASE_UNIT_SIZE)
-typedef struct {
-  uint16_t node_id;
-  uint16_t time;
-  uint16_t n_rcvd;
-  uint16_t n_tot;
-} flash_struct_dy;
-typedef struct {
-  uint16_t time;
-  uint32_t en_on;
-  uint32_t en_tot;
-} flash_struct_dc;
-#endif /* FLASH */
 
 #ifndef AVG_RELAY_CNT_UPDATE
 #define AVG_RELAY_CNT_UPDATE         4

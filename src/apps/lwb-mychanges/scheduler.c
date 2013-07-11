@@ -20,6 +20,7 @@ static uint16_t min_next_ready;
 #endif /* MINIMIZE_LATENCY */
 #endif /* DYNAMIC_PERIOD */
 
+//--------------------------------------------------------------------------------------------------
 void add_stream(uint16_t id, stream_req req) {
   stream_info *stream = memb_alloc(&streams_memb);
   if (stream == NULL) {
@@ -49,6 +50,7 @@ void add_stream(uint16_t id, stream_req req) {
   n_added++;
 }
 
+//--------------------------------------------------------------------------------------------------
 void del_stream(stream_info *stream) {
   if (stream == NULL) {
     // wrong pointer, don't do anything
@@ -61,6 +63,7 @@ void del_stream(stream_info *stream) {
   n_deleted++;
 }
 
+//--------------------------------------------------------------------------------------------------
 void process_stream_req(uint16_t id, stream_req req) {
   stream_info *curr_stream;
 #if FAIRNESS
@@ -115,6 +118,7 @@ void process_stream_req(uint16_t id, stream_req req) {
   }
 }
 
+//--------------------------------------------------------------------------------------------------
 #if DYNAMIC_PERIOD
 // implementation of the binary GCD algorithm
 static inline uint16_t gcd(uint16_t u, uint16_t v) {
@@ -155,6 +159,7 @@ static inline uint16_t gcd(uint16_t u, uint16_t v) {
     return u << shift;
 }
 
+//--------------------------------------------------------------------------------------------------
 static inline void change_period(void) {
 #if MINIMIZE_LATENCY
 #if JOINING_NODES && DYNAMIC_FREE_SLOTS
@@ -221,7 +226,9 @@ static inline void change_period(void) {
 }
 #endif /* DYNAMIC_PERIOD */
 
+//--------------------------------------------------------------------------------------------------
 void compute_schedule(void) {
+
   t_sched_start = RTIMER_NOW();
   leds_on(LEDS_ALL);
   // store information about the last schedule
@@ -235,41 +242,32 @@ void compute_schedule(void) {
   min_next_ready = PERIOD_MAX;
 #endif /* MINIMIZE_LATENCY */
 #endif /* DYNAMIC_PERIOD */
-#if COMPRESS
-//  uint16_t snc_tmp[N_SLOTS_MAX];
+
   ack_snc = 0;
   first_snc = 0;
-#endif /* COMPRESS */
   // number of slots assigned in the schedule
   uint8_t n_slots_assigned = 0;
   // embed the node id of the host
-#if COMPRESS
   sched.host_id = node_id;
-#else
-  set_node_id_to_schedule(sched.slot, n_slots_assigned, node_id);
-  n_slots_assigned++;
-#endif /* COMPRESS */
 
   if (stream_ack_idx) {
     // there's at least one stream ack to send: assign the first slot to the host itself
-#if COMPRESS
     snc_tmp[n_slots_assigned] = 0;
     snc[n_slots_assigned] = 0;
     ack_snc = 1;
     first_snc = 1;
-#else
-    set_node_id_to_schedule(sched.slot, n_slots_assigned, node_id);
-#endif /* COMPRESS */
     n_slots_assigned++;
   }
   // current stream being processed
   stream_info *curr_stream;
   for (curr_stream = list_head(streams_list); curr_stream != NULL; ) {
+
 #if REMOVE_NODES
     if (curr_stream->n_cons_missed & 0x80) {
       curr_stream->n_cons_missed &= 0x7f;
       curr_stream->n_cons_missed++;
     }
+
     if (curr_stream->n_cons_missed > N_CONS_MISSED_MAX) {
       // too many consecutive slots without reception: delete this stream
       stream_info *stream_to_remove = curr_stream;
@@ -277,6 +275,7 @@ void compute_schedule(void) {
       del_stream(stream_to_remove);
     } else {
 #endif /* REMOVE_NODES */
+
 #if DYNAMIC_PERIOD
 #if MINIMIZE_LATENCY
       if (curr_stream->next_ready - time < min_next_ready) {
@@ -372,12 +371,10 @@ void compute_schedule(void) {
         to_assign = N_SLOTS_MAX - n_slots_assigned;
       }
       uint8_t last = n_slots_assigned + to_assign;
+
       for (; n_slots_assigned < last; n_slots_assigned++) {
-#if COMPRESS
         snc_tmp[n_slots_assigned] = curr_stream->node_id;
-#else
-        set_node_id_to_schedule(sched.slot, n_slots_assigned, curr_stream->node_id);
-#endif /* COMPRESS */
+
 #if REMOVE_NODES
         streams[n_slots_assigned] = curr_stream;
 #endif /* REMOVE_NODES */
@@ -395,22 +392,19 @@ void compute_schedule(void) {
     if (curr_stream == NULL) {
       // end of the list: start again from the head of the list
       curr_stream = list_head(streams_list);
-#if COMPRESS
       first_snc = n_slots_assigned;
-#endif /* COMPRESS */
     }
   } while (curr_stream != init_stream);
 
 set_schedule:
   // embed the number of assigned slots into the schedule
-#if COMPRESS
+
   memcpy(&snc[ack_snc], &snc_tmp[first_snc], (n_slots_assigned - first_snc) * 2);
   memcpy(&snc[ack_snc + n_slots_assigned - first_snc], &snc_tmp[ack_snc], (first_snc - ack_snc) * 2);
   N_SLOTS |= GET_N_SLOTS(n_slots_assigned);
+
   compress_schedule(GET_N_SLOTS(N_SLOTS));
-#else
-  N_SLOTS |= GET_N_SLOTS(n_slots_assigned) - 1;
-#endif /* COMPRESS */
+
 #if TWO_SCHEDS
   if (period != 1) {
     // this schedule is sent at the end of a round: do not communicate
@@ -430,6 +424,7 @@ set_schedule:
   leds_off(LEDS_ALL);
 }
 
+//--------------------------------------------------------------------------------------------------
 void scheduler_init(void) {
   // initialize streams member and list
   memb_init(&streams_memb);
