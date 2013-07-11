@@ -25,13 +25,13 @@
 #endif /* TIME_SCALE */
 
 enum {
-	BOOTSTRAP,
-	QUASI_SYNCED,
-	SYNCED,
-	ALREADY_SYNCED,
-	UNSYNCED_1,
-	UNSYNCED_2,
-	UNSYNCED_3,
+  BOOTSTRAP,
+  QUASI_SYNCED,
+  SYNCED,
+  ALREADY_SYNCED,
+  UNSYNCED_1,
+  UNSYNCED_2,
+  UNSYNCED_3,
 } sync_states;
 const uint8_t sync_leds[] = {6, 3, 0, 1, 2, 4, 5};
 
@@ -85,10 +85,10 @@ const uint8_t sync_leds[] = {6, 3, 0, 1, 2, 4, 5};
 
 /*--------------------------------------------------------------------------*/
 typedef struct {
-	uint16_t node_id;
-	uint16_t dest;
+  uint16_t node_id;
+  uint16_t dest;
 #if STATIC
-	uint8_t  relay_cnt;
+  uint8_t  relay_cnt;
 #endif /* STATIC */
 } data_header_struct;
 #if STATIC
@@ -98,33 +98,33 @@ typedef struct {
 #endif /* STATIC */
 
 typedef struct {
-	uint32_t en_on;
-	uint32_t en_tot;
+  uint32_t en_on;
+  uint32_t en_tot;
 #if LATENCY
-	uint16_t gen_time;
+  uint16_t gen_time;
 #endif /* LATENCY */
 #if MOBILE
-	uint16_t n_rcvd_tot;
+  uint16_t n_rcvd_tot;
 #endif /* MOBILE */
 #if USERINT_INT
-	uint8_t low_ipi;
-	uint8_t relay_cnt;
-	uint16_t n_rcvd_tot;
+  uint8_t low_ipi;
+  uint8_t relay_cnt;
+  uint16_t n_rcvd_tot;
 #endif /* USERINT_INT */
 #if !COOJA
 #if LWB_DEBUG
-	uint32_t en_control;
-	uint8_t  relay_cnt;
+  uint32_t en_control;
+  uint8_t  relay_cnt;
 #if (!(LATENCY || MOBILE || USERINT_INT))
-	uint8_t  foo[2];
+  uint8_t  foo[2];
 #endif /* (!(LATENCY || MOBILE)) */
 #else
 #if LATENCY || MOBILE
-	uint8_t  foo[5];
+  uint8_t  foo[5];
 #elif USERINT_INT
-	uint8_t  foo[3];
+  uint8_t  foo[3];
 #else
-	uint8_t  foo[7];
+  uint8_t  foo[7];
 #endif /* LATENCY */
 #endif /* LWB_DEBUG */
 #endif /* !COOJA */
@@ -136,48 +136,48 @@ typedef struct {
 #endif /* COOJA */
 
 typedef struct {
-	uint16_t ipi;
-	uint16_t time_info;
-	uint8_t  req_type;
+  uint16_t ipi;
+  uint16_t time_info;
+  uint8_t  req_type;
 } stream_req;
 #define STREAM_REQ_LENGTH 5
 
 enum {
-	ADD_STREAM,
-	DEL_STREAM,
-	REP_STREAM
+  ADD_STREAM,
+  DEL_STREAM,
+  REP_STREAM
 } stream_req_types;
 
 enum {
-	NO_DATA,
-	DATA,
-	STREAM_ACK,
-	SCHED
+  NO_DATA,
+  DATA,
+  STREAM_ACK,
+  SCHED
 } pkt_types;
 
 typedef struct stream_info {
-	struct stream_info *next;
-	uint16_t node_id;
-	uint16_t ipi;
-	uint16_t last_assigned;
-	uint16_t next_ready;
-	uint8_t  stream_id;
+  struct stream_info *next;
+  uint16_t node_id;
+  uint16_t ipi;
+  uint16_t last_assigned;
+  uint16_t next_ready;
+  uint8_t  stream_id;
 #if REMOVE_NODES
-	uint8_t  n_cons_missed;
+  uint8_t  n_cons_missed;
 #endif /* REMOVE_NODES */
 } stream_info;
 
 typedef struct {
 #if COMPRESS
-	uint16_t host_id;
+  uint16_t host_id;
 #endif /* COMPRESS */
-	uint16_t time;
-	uint8_t  n_slots;
-	uint8_t  T;
+  uint16_t time;
+  uint8_t  n_slots;
+  uint8_t  T;
 #if COMPRESS
-	uint8_t  slot[120];
+  uint8_t  slot[120];
 #else
-	uint8_t  slot[(N_SLOTS_MAX * NODE_ID_BITS) / 8 + 1];
+  uint8_t  slot[(N_SLOTS_MAX * NODE_ID_BITS) / 8 + 1];
 #endif /* COMPRESS */
 } sched_struct;
 #if COMPRESS
@@ -213,10 +213,10 @@ PROCESS_NAME(scheduler);
 
 #if JOINING_NODES
 enum {
-	NOT_JOINED,
-	JOINING,
-	JOINED,
-	JUST_TRIED
+  NOT_JOINED,
+  JOINING,
+  JOINED,
+  JUST_TRIED
 } bs_state;
 #define T_FREE_ON                    (RTIMER_SECOND / 100)           // 10 ms
 #if DYNAMIC_FREE_SLOTS
@@ -236,11 +236,11 @@ enum {
 #if USERINT_INT
 #define IS_USERINT_SET() (P2IN & BV(7))
 #define ENABLE_USERINT_INT() do { \
-	P2SEL &= ~BV(7); \
-	P2DIR &= ~BV(7); \
-	P2IES |= BV(7); \
-	P2IFG = 0; \
-	P2IE |= BV(7); \
+  P2SEL &= ~BV(7); \
+  P2DIR &= ~BV(7); \
+  P2IES |= BV(7); \
+  P2IFG = 0; \
+  P2IE |= BV(7); \
 } while (0)
 #endif /* USERINT_INT */
 
@@ -248,15 +248,15 @@ enum {
 #define FLASH_OFFSET (1 * XMEM_ERASE_UNIT_SIZE)
 #define FLASH_SIZE   (14 * XMEM_ERASE_UNIT_SIZE)
 typedef struct {
-	uint16_t node_id;
-	uint16_t time;
-	uint16_t n_rcvd;
-	uint16_t n_tot;
+  uint16_t node_id;
+  uint16_t time;
+  uint16_t n_rcvd;
+  uint16_t n_tot;
 } flash_struct_dy;
 typedef struct {
-	uint16_t time;
-	uint32_t en_on;
-	uint32_t en_tot;
+  uint16_t time;
+  uint32_t en_on;
+  uint32_t en_tot;
 } flash_struct_dc;
 #endif /* FLASH */
 
