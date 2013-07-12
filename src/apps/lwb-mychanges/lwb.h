@@ -27,7 +27,7 @@
 
 /// @brief Synchronization states
 enum {
-  BOOTSTRAP,      ///< Initial state. Not synchronized
+  BOOTSTRAP=0,      ///< Initial state. Not synchronized
   QUASI_SYNCED,   ///< Received schedule when in BOOTSTRAP state. Clock drift is not estimated.
   SYNCED,         ///< Received schedule and clock drift is estimated.
   ALREADY_SYNCED, ///< @note Kasun: Still no idea why this is
@@ -36,6 +36,15 @@ enum {
   UNSYNCED_3,     ///< Missed schedule three times.
 } sync_states;
 
+/// @brief LEDs to be turned on based on the synchronization state.
+/// @details Following colors are only for SKY platform.
+///         BOOTSTRAP       => BLUE + RED
+///         QUASI_SYNCED    => BLUE + GREEN
+///         SYNCED          =>
+///         ALREADY_SYNCED  => GREEN
+///         UNSYNCED_1      => BLUE
+///         UNSYNCED_2      => RED
+///         UNSYNCED_3      => GREEN + RED
 const uint8_t sync_leds[] = {6, 3, 0, 1, 2, 4, 5};
 
 /*--------------------------------------------------------------------------*/
@@ -166,7 +175,7 @@ typedef struct stream_info {
 typedef struct {
   uint16_t host_id;     ///< ID of the host
   uint16_t time;        ///< Duration of the round @note Kasun: Not sure
-  uint8_t  n_slots;     ///< Number of slots in the round
+  uint8_t  n_slots;     ///< Number of slots in the round. Free slots = (n_slots >> 6), Data slots = (n_slots & 0x3F)
   uint8_t  T;           ///< Round period (duration between beginning of two rounds)
   uint8_t  slot[120];
 } sched_struct;
