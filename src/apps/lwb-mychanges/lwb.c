@@ -110,7 +110,7 @@ static uint8_t  first_snc, ack_snc;
 
 #define TIME       sched.time     ///< Starting time of the schedule.
 #define PERIOD     sched.T        ///< Round period (time between two rounds) in current schedule.
-#define N_SLOTS    sched.n_slots  ///< Number of slots in current schedule.
+#define N_SLOTS    sched.n_slots  ///< Number of slots in current schedule. Free slots = (n_slots >> 6), Data slots = (n_slots & 0x3F)
 #define OLD_PERIOD old_sched.T    ///< Previous round period.
 
 #define PERIOD_RT(T)     ((T) * (uint32_t)RTIMER_SECOND + ((int32_t)((T) * skew) / (int32_t)64))
