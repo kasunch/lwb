@@ -5,6 +5,7 @@
  *      Author: fe
  */
 
+//--------------------------------------------------------------------------------------------------
 static inline void estimate_skew(void) {
   uint16_t time_diff = (TIME - last_time) / TIME_SCALE;
   int16_t skew_tmp = T_REF - last_t_ref_sync + RTIMER_SECOND * (time_diff % 2);
@@ -21,6 +22,7 @@ static inline void estimate_skew(void) {
   }
 }
 
+//--------------------------------------------------------------------------------------------------
 static inline void update_relay_cnt(void) {
 #if AVG_RELAY_CNT_UPDATE < 2
   relay_cnt_sum = get_relay_cnt();
@@ -200,7 +202,10 @@ PT_THREAD(g_sync(struct rtimer *t, void *ptr)) {
                    GLOSSY_SYNC,
                    N_SYNC,
                    SCHED,
-                   RTIMER_TIME(t) + T_SYNC_ON, (rtimer_callback_t)g_sync, &rt, NULL);
+                   RTIMER_TIME(t) + T_SYNC_ON,
+                   (rtimer_callback_t)g_sync,
+                   &rt,
+                   NULL);
       PT_YIELD(&pt_sync);
 
       leds_off(LEDS_GREEN);
@@ -242,7 +247,10 @@ PT_THREAD(g_sync(struct rtimer *t, void *ptr)) {
                      GLOSSY_SYNC,
                      N_SYNC,
                      0,
-                     RTIMER_NOW() + T_SYNC_ON, (rtimer_callback_t)g_sync, &rt, NULL);
+                     RTIMER_NOW() + T_SYNC_ON,
+                     (rtimer_callback_t)g_sync,
+                     &rt,
+                     NULL);
         PT_YIELD(&pt_sync);
 
         while (!IS_SYNCED()) {
@@ -266,7 +274,10 @@ PT_THREAD(g_sync(struct rtimer *t, void *ptr)) {
                        GLOSSY_SYNC,
                        N_SYNC,
                        0,
-                       RTIMER_NOW() + T_SYNC_ON, (rtimer_callback_t)g_sync, &rt, NULL);
+                       RTIMER_NOW() + T_SYNC_ON,
+                       (rtimer_callback_t)g_sync,
+                       &rt,
+                       NULL);
           PT_YIELD(&pt_sync);
         }
       } else {
@@ -278,7 +289,10 @@ PT_THREAD(g_sync(struct rtimer *t, void *ptr)) {
                      GLOSSY_SYNC,
                      N_SYNC,
                      0,
-                     RTIMER_TIME(t) + T_SYNC_ON + T_guard, (rtimer_callback_t)g_sync, &rt, NULL);
+                     RTIMER_TIME(t) + T_SYNC_ON + T_guard,
+                     (rtimer_callback_t)g_sync,
+                     &rt,
+                     NULL);
         PT_YIELD(&pt_sync);
       }
 
