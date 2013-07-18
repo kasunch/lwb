@@ -59,6 +59,7 @@ static inline void compute_new_sync_state(void) {
     // schedule received and t_ref updated
     period = GET_PERIOD(PERIOD);
     if (TIME < last_time) {
+      // Current time of the host is less than the last reported time.
       // 16-bit timer overflow: increment by 1 the 16 MSB of time
       SET_TIME_HIGH(GET_TIME_HIGH() + 1);
     }
@@ -264,6 +265,8 @@ PT_THREAD(g_sync(struct rtimer *t, void *ptr)) {
           PT_YIELD(&pt_sync);
 #endif /* PRINT_BOOTSTRAP_MSG */
           /// @note Kasun: I don't know this is necessary or not.
+          ///       It seems node get stuck in this loop while trying to receive schedule to
+          ///       to exit from bootstrap state.
           // wait 50 millisecond before retrying
           // rtimer_clock_t now = RTIMER_NOW();
           // while (RTIMER_CLOCK_LT(RTIMER_NOW(), now + RTIMER_SECOND / 20));

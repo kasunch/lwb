@@ -74,7 +74,7 @@ const uint8_t sync_leds[] = {6, 3, 0, 1, 2, 4, 5};
 #elif SHORT_SLOTS
 #define T_SYNC_ON                   (RTIMER_SECOND / 133)          //  7.5 ms
 #else
-#define T_SYNC_ON                   (RTIMER_SECOND / 66)           //  15 ms
+#define T_SYNC_ON                   (RTIMER_SECOND / 66)           ///< Glossy on time for receiving schedule (15 ms)
 #endif /* LONG_SLOTS */
 #else
 #define N_SYNC                      5
@@ -91,7 +91,7 @@ const uint8_t sync_leds[] = {6, 3, 0, 1, 2, 4, 5};
 #define SCHEDULE(ref, offset, cb)   rtimer_set(&rt, ref + offset, 1, (rtimer_callback_t)cb, NULL)
 #define SCHEDULE_L(ref, offset, cb) rtimer_set_long(&rt, ref, offset, (rtimer_callback_t)cb, NULL)
 #define SYNC_LEDS()                 { leds_off(LEDS_ALL); leds_on(sync_leds[sync_state]); }
-#define T_REF                       (get_t_ref_l())
+#define T_REF                       (get_t_ref_l())   ///< Reference time of Glossy
 
 /*--------------------------------------------------------------------------*/
 typedef struct {
@@ -174,7 +174,7 @@ typedef struct stream_info {
 /// @brief Structure for schedule information
 typedef struct {
   uint16_t host_id;     ///< ID of the host
-  uint16_t time;        ///< Duration of the round @note Kasun: Not sure
+  uint16_t time;        ///< Current time of the host in seconds
   uint8_t  n_slots;     ///< Number of slots in the round. Free slots = (n_slots >> 6), Data slots = (n_slots & 0x3F)
   uint8_t  T;           ///< Round period (duration between beginning of two rounds)
   uint8_t  slot[120];
@@ -184,17 +184,19 @@ typedef struct {
 
 
 #if COOJA
-#define N_RR                        2
+#define N_RR                        2   ///< Number of Glossy retransmissions
 #else
-#define N_RR                        3
+#define N_RR                        3   ///< Number of Glossy retransmissions
 #endif /* COOJA */
-#define T_GAP                       (RTIMER_SECOND / 250)           //  4 ms
+
+#define T_GAP                       (RTIMER_SECOND / 250)           ///< Gap between slots (4 ms).
+
 #if LONG_SLOTS
 #define T_RR_ON                     (RTIMER_SECOND / 50)            // 20 ms
 #elif SHORT_SLOTS
 #define T_RR_ON                     (RTIMER_SECOND / 200)           //  5 ms
 #else
-#define T_RR_ON                     (RTIMER_SECOND / 100)           // 10 ms
+#define T_RR_ON                     (RTIMER_SECOND / 100)           ///< Glossy on time for a slot (10 ms)
 #endif /* LONG_SLOTS */
 
 /*--------------------------------------------------------------------------*/

@@ -108,8 +108,8 @@ static uint16_t snc_tmp[N_SLOTS_MAX];
 
 static uint8_t  first_snc, ack_snc;
 
-#define TIME       sched.time     ///< Starting time of the schedule.
-#define PERIOD     sched.T        ///< Round period (time between two rounds) in current schedule.
+#define TIME       sched.time     ///< Current time of the host in seconds.
+#define PERIOD     sched.T        ///< Round period (time between two rounds) in current schedule in seonds.
 #define N_SLOTS    sched.n_slots  ///< Number of slots in current schedule. Free slots = (n_slots >> 6), Data slots = (n_slots & 0x3F)
 #define OLD_PERIOD old_sched.T    ///< Previous round period.
 
@@ -181,7 +181,7 @@ static inline void update_control_dc(void) {
 #endif /* CONTROL_DC */
 }
 
-static uint32_t time;
+static uint32_t time;                           ///< Global time
 static uint8_t  sync_state;
 static uint16_t n_streams, n_slots_to_assign;
 static uint8_t  relay_cnt_cnt;
