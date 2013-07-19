@@ -153,10 +153,11 @@ static uint16_t last_free_reqs_time;
 
 static uint16_t last_t_ref_sync, t_ref_sync = 0;
 static uint32_t skew = 0;
-static uint8_t  period;
-#define GET_PERIOD(per) ((per) & 0x7f)
-#define SET_COMM(comm) ((comm) << 7)
-#define GET_COMM(comm) ((comm) >> 7)
+static uint8_t  period;                       ///< Round period.
+
+#define GET_PERIOD(per) ((per) & 0x7f)        ///< Extract round period. The round period is represented by lest significant 7 bits.
+#define SET_COMM(comm) ((comm) << 7)          ///< Set whether data communication follows the schedule or not.
+#define GET_COMM(comm) ((comm) >> 7)          ///< Get whether data communication follows the schedule or not.
 
 #define GET_TIME_LOW()   (uint16_t)(time & 0xffff)
 #define GET_TIME_HIGH()  (uint16_t)(time >> 16)
@@ -181,13 +182,14 @@ static inline void update_control_dc(void) {
 #endif /* CONTROL_DC */
 }
 
-static uint32_t time;                           ///< Global time
-static uint8_t  sync_state;
+static uint32_t time;                           ///< Global time in seconds
+static uint8_t  sync_state;                     ///< Synchronization state of the node
 static uint16_t n_streams, n_slots_to_assign;
 static uint8_t  relay_cnt_cnt;
 static uint16_t relay_cnt_sum;
 
-static rtimer_clock_t T_guard;
+static rtimer_clock_t T_guard;              ///< Guard time that Glossy should be started earlier than the planned time.
+                                            ///< This is placed to reduce probability of missing packets due to radio being turned on late.
 
 
 uint16_t get_node_id_from_schedule(uint8_t *sched, uint16_t pos) {

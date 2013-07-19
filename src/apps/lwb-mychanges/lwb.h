@@ -140,9 +140,9 @@ typedef struct {
 #endif /* COOJA */
 
 typedef struct {
-  uint16_t ipi;
-  uint16_t time_info;
-  uint8_t  req_type;
+  uint16_t ipi;           ///< Inter-packet interval in seconds
+  uint16_t time_info;     ///< Starting time of the stream @note Not sure
+  uint8_t  req_type;      ///< Request type
 } stream_req;
 #define STREAM_REQ_LENGTH 5
 
@@ -161,13 +161,13 @@ enum {
 
 typedef struct stream_info {
   struct stream_info *next;
-  uint16_t node_id;
-  uint16_t ipi;
+  uint16_t node_id;             ///< Node ID
+  uint16_t ipi;                 ///< Inter-packet interval in seconds
   uint16_t last_assigned;
   uint16_t next_ready;
-  uint8_t  stream_id;
+  uint8_t  stream_id;           ///< Stream ID
 #if REMOVE_NODES
-  uint8_t  n_cons_missed;
+  uint8_t  n_cons_missed;       ///< Number of consecutive slot misses for the stream
 #endif /* REMOVE_NODES */
 } stream_info;
 

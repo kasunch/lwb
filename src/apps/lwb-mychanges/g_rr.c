@@ -110,12 +110,16 @@ void check_for_stream_requests(void) {
 PT_THREAD(g_rr_host(struct rtimer *t, void *ptr)) {
   PT_BEGIN(&pt_rr);
 
+  // The first slot starts after 3 * T_GAP from the end of Glossy phase for schedule.
+  // starting time of a slot = T_REF + (3 * T_GAP) + (slot_idx * (T_RR_ON + T_GAP))
+  // end time of a slot      = T_REF + T_SYNC_ON + (3 * T_GAP) + (slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON
+
   while (1) {
 
     for (slot_idx = 0; slot_idx < GET_N_SLOTS(N_SLOTS); slot_idx++) {
 
       leds_off(LEDS_ALL);
-      SCHEDULE(T_REF, T_SYNC_ON + 3 * T_GAP + slot_idx * (T_RR_ON + T_GAP), g_rr_host);
+      SCHEDULE(T_REF, T_SYNC_ON + (3 * T_GAP) + (slot_idx * (T_RR_ON + T_GAP)), g_rr_host);
       PT_YIELD(&pt_rr);
 
        leds_on(slot_idx + 1);
@@ -137,8 +141,10 @@ PT_THREAD(g_rr_host(struct rtimer *t, void *ptr)) {
                      GLOSSY_NO_SYNC,
                      N_RR,
                      pkt_type,
-                     T_REF + T_SYNC_ON + (slot_idx + 1) * (T_RR_ON + T_GAP) + 2 * T_GAP,
-                     (rtimer_callback_t)g_rr_host, &rt, NULL);
+                     T_REF + T_SYNC_ON + (3 * T_GAP) + (slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                     (rtimer_callback_t)g_rr_host,
+                     &rt,
+                     NULL);
       } else {
 
         glossy_start((uint8_t *)pkt,
@@ -147,8 +153,10 @@ PT_THREAD(g_rr_host(struct rtimer *t, void *ptr)) {
                      GLOSSY_NO_SYNC,
                      N_RR,
                      0,
-                     T_REF + T_SYNC_ON + (slot_idx + 1) * (T_RR_ON + T_GAP) + 2 * T_GAP,
-                     (rtimer_callback_t)g_rr_host, &rt, NULL);
+                     T_REF + T_SYNC_ON + (3 * T_GAP) + (slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                     (rtimer_callback_t)g_rr_host,
+                     &rt,
+                     NULL);
       }
 
       PT_YIELD(&pt_rr);
@@ -223,10 +231,13 @@ PT_THREAD(g_rr_host(struct rtimer *t, void *ptr)) {
                    GLOSSY_NO_SYNC,
                    N_RR,
                    0,
-                   T_REF + T_SYNC_ON + (slot_idx) * (T_RR_ON + T_GAP) + 3 * T_GAP + T_FREE_ON,
-                   (rtimer_callback_t)g_rr_host, &rt, NULL);
+                   T_REF + T_SYNC_ON + (3 * T_GAP) + ((slot_idx) * (T_RR_ON + T_GAP)) + T_FREE_ON,
+                   (rtimer_callback_t)g_rr_host,
+                   &rt,
+                   NULL);
       PT_YIELD(&pt_rr);
 
+      // Check whether we have received a stream request.
       if (glossy_stop() && ((get_data_len() - DATA_HEADER_LENGTH) % STREAM_REQ_LENGTH == 0)) {
         // get the data header
         memcpy(&data_header, pkt, DATA_HEADER_LENGTH);
@@ -243,6 +254,8 @@ PT_THREAD(g_rr_host(struct rtimer *t, void *ptr)) {
     process_poll(&print);
 #endif /* LWB_DEBUG && (FAIRNESS || COOJA) */
 
+    // By now, we should received all new stream requests.
+    // It is time to compute new schedule.
     compute_schedule();
 
     // schedule g_sync in 1 second

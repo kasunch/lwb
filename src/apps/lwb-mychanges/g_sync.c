@@ -76,9 +76,11 @@ static inline void compute_new_sync_state(void) {
       }
     } else {
       if (sync_state == QUASI_SYNCED && !GET_COMM(PERIOD)) {
+        // We've received a schedule at the end of a round.
         // no immediate communication: remain in this state and don't synchronize
       } else {
         if (GET_COMM(PERIOD)) {
+          // We've received a schedule at the beginning of a round.
           // immediate communication: go to synced and estimate skew
           sync_state = SYNCED;
           T_guard = T_GUARD;
@@ -177,8 +179,11 @@ static inline void compute_new_joining_state(void) {
 static rtimer_clock_t t_no_comm;
 
 //--------------------------------------------------------------------------------------------------
-/// @note This proto-thread does LWB synchronization using schedule from the host node.
+/// @brief This proto-thread does LWB synchronization using schedule from the host node.
+///
 ///       If it is a host node, a Glossy phase is started as an initiator to disseminate the schedule.
+///       It should also be noted that the schedule can be disseminated at the end of a round.
+///
 ///       If it is a source node(or other node), a Glossy phase is started as a receiver to receive the schedule.
 PT_THREAD(g_sync(struct rtimer *t, void *ptr)) {
   PT_BEGIN(&pt_sync);
@@ -191,6 +196,7 @@ PT_THREAD(g_sync(struct rtimer *t, void *ptr)) {
     while (1) {
       leds_on(LEDS_GREEN);
       if (GET_COMM(PERIOD)) {
+        // This schedule is to be sent at the beginning of the round.
         t_start = RTIMER_TIME(t);
       } else {
         t_no_comm = RTIMER_TIME(t);
@@ -214,6 +220,7 @@ PT_THREAD(g_sync(struct rtimer *t, void *ptr)) {
       update_control_dc();
 
       if (GET_COMM(PERIOD)) {
+        // We've just sent the schedule at the beginning of the round.
         if (IS_SYNCED() && RTIMER_CLOCK_LT(t_start, T_REF)) {
           t_ref_sync = T_REF;
           last_time = TIME;
@@ -224,6 +231,9 @@ PT_THREAD(g_sync(struct rtimer *t, void *ptr)) {
         PT_SCHEDULE(g_rr_host(&rt, NULL));
 
       } else {
+        // We've just sent the schedule at the end of the round.
+        // We have to send the schedule at the beginning of the next round. So, we schedule
+        // g_sync proto-thread to send the schedule again in the next round.
         SCHEDULE_L(t_start, period * (uint32_t)RTIMER_SECOND, g_sync); // L
         // set time to the new value
         TIME = (uint16_t)time;
@@ -313,6 +323,7 @@ PT_THREAD(g_sync(struct rtimer *t, void *ptr)) {
 
       if ((sync_state == SYNCED || sync_state == UNSYNCED_1) && GET_COMM(PERIOD)) {
         // communication
+        // We've just received the schedule at the beginning of the round.
         uncompress_schedule();
         PT_SCHEDULE(g_rr_source(&rt, NULL));
         PT_YIELD(&pt_sync);
@@ -322,19 +333,19 @@ PT_THREAD(g_sync(struct rtimer *t, void *ptr)) {
         // erase the schedule before receiving the next one
         memset((uint8_t *)&sched.slot, 0, sizeof(sched.slot));
         SYNC_LEDS();
+
         if (sync_state != BOOTSTRAP) {
           if (GET_COMM(PERIOD)) {
             SCHEDULE(t_ref_sync, PERIOD_RT(1) - T_guard, g_sync);
           } else {
-
             SCHEDULE_L(t_ref_sync, PERIOD_RT(period) - T_guard, g_sync); // L
-
           }
 
           process_poll(&print);
 
           PT_YIELD(&pt_sync);
         } else {
+          // we are in BOOTSTRAP state.
           if (IS_SYNCED() && (period > 1)) {
             // we received a schedule which was not meant for synchronization:
             // wake up a bit earlier than the next synchronization schedule
