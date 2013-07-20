@@ -83,6 +83,7 @@ void check_for_stream_requests(void) {
 #endif /* JOINING_NODES */
 
     // check if we already processed stream requests from this node during this round
+    // we allow only one stream request per round from a node.
     uint8_t already_processed = 0;
     for (idx = 0; idx < stream_ack_idx; idx++) {
       if (stream_ack[idx] == data_header.node_id) {
