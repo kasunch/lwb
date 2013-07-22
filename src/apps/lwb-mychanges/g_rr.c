@@ -30,14 +30,8 @@ void add_relay_cnt(uint16_t id, uint8_t relay_cnt) {
 
 void prepare_data_packet(uint8_t free_slot) {
   data_header.node_id = node_id;
-#if STATIC
-  if (relay_cnt_cnt >= AVG_RELAY_CNT_UPDATE / 2) {
-    data_header.relay_cnt = (relay_cnt_sum * RELAY_CNT_FACTOR) / relay_cnt_cnt;
-  } else {
-    data_header.relay_cnt = RELAY_CNT_INVALID;
-  }
-#endif /* STATIC */
   pkt_type = SET_N_STREAM_REQS(n_stream_reqs);
+
   if (!free_slot) {
     pkt_type |= DATA;
     data.en_on = energest_type_time(ENERGEST_TYPE_LISTEN) + energest_type_time(ENERGEST_TYPE_TRANSMIT);

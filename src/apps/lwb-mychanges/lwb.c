@@ -268,10 +268,7 @@ PROCESS_THREAD(lwb_init, ev, data)
 #else
     n_stream_reqs = 0;
 #endif /* JOINING_NODES */
-#if STATIC
-    relay_cnt_sum = 0;
-    relay_cnt_cnt = 0;
-#endif /* STATIC */
+
     SCHEDULE_L(RTIMER_NOW() - 10, INIT_PERIOD * (uint32_t)(random_rand() % RTIMER_SECOND), g_sync);
   }
 

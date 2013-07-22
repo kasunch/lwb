@@ -97,15 +97,9 @@ const uint8_t sync_leds[] = {6, 3, 0, 1, 2, 4, 5};
 typedef struct {
   uint16_t node_id;
   uint16_t dest;
-#if STATIC
-  uint8_t  relay_cnt;
-#endif /* STATIC */
 } data_header_struct;
-#if STATIC
-#define DATA_HEADER_LENGTH 5
-#else
+
 #define DATA_HEADER_LENGTH 4
-#endif /* STATIC */
 
 typedef struct {
   uint32_t en_on;

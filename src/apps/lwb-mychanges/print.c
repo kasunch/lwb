@@ -310,9 +310,7 @@ void print_logs(uint8_t times) {
     printf("\n");
 #endif /* GLOSSY_DEBUG */
 #endif /* COMPRESS */
-#if STATIC
-    printf("relay_cnt_cnt %u, relay_cnt_sum %u\n", relay_cnt_cnt, relay_cnt_sum);
-#endif /* STATIC */
+
 #if GLOSSY_DEBUG
     printf("high_T_irq %u, rx_timeout %u, bad_length %u, bad_header %u, bad_crc %u\n",
         high_T_irq, rx_timeout, bad_length, bad_header, bad_crc);
