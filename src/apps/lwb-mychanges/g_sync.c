@@ -149,23 +149,26 @@ static inline void compute_new_sync_state(void) {
 //--------------------------------------------------------------------------------------------------
 static inline void compute_new_joining_state(void) {
   if (sync_state == SYNCED) {
-    if (joining_state == NOT_JOINED) {
-      if (is_source && n_stream_reqs == 0) {
-        n_stream_reqs = 1;
-        stream_reqs[0].ipi = INIT_IPI;
-        stream_reqs[0].req_type = SET_STREAM_ID(1) | (ADD_STREAM & 0x3);
-        stream_reqs[0].time_info = TIME;
-        t_last_req = 0;
-      }
-      joining_state = JOINING;
-      // try as soon as sync_state is SYNCED
-      rounds_to_wait = 0;
-    } else if (joining_state == JUST_TRIED) {
-      // joining did not succeed at the last trial (collision)
-      rounds_to_wait = random_rand() % (1 << (n_joining_trials % 4));
-      n_joining_trials++;
-      joining_state = JOINING;
-    }
+    /// @note Following part is not needed.
+    /// We send stream add requests bead on the demand. If no demand, not stream add request.
+    /// The number of rounds to wait can be set just after sending stream add request.
+//    if (joining_state == NOT_JOINED) {
+//      if (is_source && n_stream_reqs == 0) {
+//        n_stream_reqs = 1;
+//        stream_reqs[0].ipi = INIT_IPI;
+//        stream_reqs[0].req_type = SET_STREAM_ID(1) | (ADD_STREAM & 0x3);
+//        stream_reqs[0].time_info = TIME;
+//        t_last_req = 0;
+//      }
+//      joining_state = JOINING;
+//      // try as soon as sync_state is SYNCED
+//      rounds_to_wait = 0;
+//    } else if (joining_state == JUST_TRIED) {
+//      // joining did not succeed at the last trial (collision)
+//      rounds_to_wait = random_rand() % (1 << (n_joining_trials % 4));
+//      n_joining_trials++;
+//      joining_state = JOINING;
+//    }
   } else {
     if (sync_state == BOOTSTRAP) {
       // set as NOT_JOINED if bootstrapping:
@@ -238,8 +241,9 @@ PT_THREAD(g_sync(struct rtimer *t, void *ptr)) {
         // set time to the new value
         TIME = (uint16_t)time;
         PERIOD = period | SET_COMM(1);
-        process_poll(&print);
+
       }
+      process_poll(&print);
       PT_YIELD(&pt_sync);
     }
   } else { //---------------------------------------------------------
@@ -326,6 +330,7 @@ PT_THREAD(g_sync(struct rtimer *t, void *ptr)) {
         // We've just received the schedule at the beginning of the round.
         uncompress_schedule();
         PT_SCHEDULE(g_rr_source(&rt, NULL));
+        process_poll(&print);
         PT_YIELD(&pt_sync);
       } else {
         // copy the current schedule to old_sched
@@ -351,11 +356,10 @@ PT_THREAD(g_sync(struct rtimer *t, void *ptr)) {
             // wake up a bit earlier than the next synchronization schedule
             T_guard = T_GUARD_3;
             SCHEDULE_L(RTIMER_NOW() - 10, PERIOD_RT(period - 1) - T_guard, g_sync); // L
-
             process_poll(&print);
-
             PT_YIELD(&pt_sync);
           }
+
         }
       }
     }
