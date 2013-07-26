@@ -7,52 +7,25 @@
 #warning ##################################################################
 #endif /* DEFAULT_CONF */
 
-#if !JOINING_NODES
-#if COOJA
-static const uint16_t nodes[] = {105, 106};
-#else
-#if TINYOS_SERIAL_FRAMES
-static uint16_t nodes[] = {103,104,105,106,109,110,111,112,115,116,119,120,121,122,125,126,127,128,131,132,
-    133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,
-    158,159,160,161,162,163,164,167,168,169,170,171,172,173,174,179,180,182,183,184,185,186,187,188,189,
-    195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,216,217,218,219,
-    220,221,222,223,224,225,226,227,228,229,230,232,233,234,235,236,237,238,239,240,241,242,243,244,245,
-    246,247,248,249,250,251,252,253,254,255,256,257,258,259,260,263,264,265,266,267,268,269,270,271,272,
-    273,274,275,276,280,281,282,283,285,286,287,288,289,290,291,292,293,294,295,296,297,298,299,301,302,
-    303,304,305,306,308,309,310,311,313,314,315,316,317,318,320,321,322,323,324,327,328,329,330,331,332,
-    333,334,335,336,337,338,339,340,343,344,345,346,347,348,350,351,352,353,355,356,357,358,359,360,361,
-    362,364,365,366,367,368,373,374,375,376,377,378,379,380,381,382,383,384,389,390,391,392,393,394,395,
-    396,397,398,399,400,405,406,408,409,410,411,412,413,414,415,416,423,424,425,426,427,428,429,430,431,
-    432,439,440,441,442,443,444,445,446,447,448,455,456,457,458,459,460,471,472,473,474,475,476};
-#else
-static const uint16_t nodes[] = {
-    101, 102, 103, 104, 105, 106, 107, 108, 109};
-//    1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
-//    18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34,
-//    50, 51};
-#endif /* COOJA */
-#endif /* TINYOS_SERIAL_FRAMES */
-#endif /* !JOINING_NODES */
-
 static uint16_t idx, slot_idx;
 
 static uint16_t hosts[] = HOSTS;
 static uint16_t sinks[] = SINKS;
 static uint16_t sources[] = SOURCES;
 static uint8_t  is_host, is_sink, is_source = 0;
+
+// For some statistics
 static uint16_t n_rcvd[N_NODES_MAX];
 static uint16_t n_tot[N_NODES_MAX];
 #if LATENCY
 static uint16_t lat[N_NODES_MAX];
 #endif /* LATENCY */
-
-static uint16_t dc[N_NODES_MAX];
+//static uint16_t dc[N_NODES_MAX];
 
 #if LWB_DEBUG && !COOJA
 static uint16_t dc_control[N_NODES_MAX];
 static uint8_t  rc[N_NODES_MAX];
 #endif /* LWB_DEBUG && !COOJA */
-
 
 void set_hosts_sinks_sources(void) {
   // initialize arrays for statistics on received packets
@@ -121,7 +94,7 @@ static struct pt pt_sync, pt_rr;
 static sched_struct sched;      ///< Current schedule
 static sched_struct old_sched;  ///< Old schedules. This may not be the previous one.
 
-static data_struct data;
+//static data_struct data;
 static data_header_struct data_header;
 
 static stream_req stream_reqs[N_STREAM_REQS_MAX]; ///< To store piggybacked stream requests
@@ -230,6 +203,73 @@ stream_info* get_stream_from_id(uint16_t id) {
 #define SET_N_FREE(a)       (a << 6)
 #define GET_N_SLOTS(a)      (a & 0x3f)
 
+#define MAX_BUF_ELEMENT_SIZE 102
+
+#define MAX_TX_BUF_SIZE 500
+#define MAX_RX_BUF_SIZE 500
+
+#define MAX_TX_BUF_ELEMENTS (MAX_TX_BUF_SIZE / MAX_BUF_ELEMENT_SIZE)
+#define MAX_RX_BUF_ELEMENTS (MAX_TX_BUF_SIZE / MAX_BUF_ELEMENT_SIZE)
+
+typedef struct data_buf {
+  struct data_buf* next;
+  uint8_t data[MAX_BUF_ELEMENT_SIZE];
+  uint8_t ui8_data_size;
+} data_buf_t;
+
+// Buffers for TX and RX
+MEMB(tx_buffer_memb, data_buf_t, MAX_TX_BUF_ELEMENTS);
+LIST(tx_buffer_list);
+MEMB(rx_buffer_memb, data_buf_t, MAX_RX_BUF_ELEMENTS);
+LIST(rx_buffer_list);
+
+static uint8_t ui8_tx_buf_element_count;
+static uint8_t ui8_rx_buf_element_count;
+
+static uint8_t ui8_n_polls;
+
+static void (*p_output_fn)(uint8_t*, uint8_t);
+
+typedef struct buffer_stats {
+  uint16_t ui16_tx_overflow;
+  uint16_t ui16_rx_overflow;
+} buffer_stats_t;
+
+static buffer_stats_t buf_stats;
+
+void lwb_input(uint8_t* p_data, uint8_t ui8_len) {
+  // Hack to avoid packet input for host node
+  /// TODO Remove this.
+  if (is_host) {
+    return;
+  }
+  data_buf_t* p_buf = memb_alloc(&tx_buffer_memb);
+  if (p_buf) {
+    memcpy(p_buf->data, p_data, ui8_len);
+    p_buf->ui8_data_size = ui8_len;
+    list_add(tx_buffer_list, p_buf);
+    ui8_tx_buf_element_count++;
+  } else {
+    buf_stats.ui16_tx_overflow++;
+  }
+
+  if (joining_state == NOT_JOINED) {
+    // We are not joined, So its time to make a joining request.
+    n_stream_reqs = 1;
+    stream_reqs[0].ipi = INIT_IPI;
+    stream_reqs[0].req_type = SET_STREAM_ID(1) | (ADD_STREAM & 0x3);
+    stream_reqs[0].time_info = INIT_DELAY;
+    joining_state = JOINING;
+  }
+}
+
+void lwb_set_output_function(void (*p_fn)(uint8_t*, uint8_t)) {
+  p_output_fn = p_fn;
+}
+
+PROCESS(lwb_init, "LWB init");
+//AUTOSTART_PROCESSES(&lwb_init);
+
 #if COMPRESS
 #include "compress.c"
 #endif /* COMPRESS */
@@ -238,8 +278,7 @@ stream_info* get_stream_from_id(uint16_t id) {
 #include "g_rr.c"
 #include "print.c"
 
-PROCESS(lwb_init, "LWB init");
-AUTOSTART_PROCESSES(&lwb_init);
+
 PROCESS_THREAD(lwb_init, ev, data)
 {
   PROCESS_BEGIN();
@@ -252,23 +291,20 @@ PROCESS_THREAD(lwb_init, ev, data)
   process_start(&print, NULL);
   process_start(&glossy_process, NULL);
 
+  memb_init(&tx_buffer_memb);
+  list_init(tx_buffer_list);
+
+  memb_init(&rx_buffer_memb);
+  list_init(rx_buffer_list);
+
+  ui8_tx_buf_element_count = 0;
+  ui8_rx_buf_element_count = 0;
+
   if (is_host) {
     scheduler_init();
     SCHEDULE_L(RTIMER_NOW() - 10, INIT_PERIOD * (uint32_t)RTIMER_SECOND, g_sync);
   } else {
-#if JOINING_NODES
-//    if (is_source) {
-//      n_stream_reqs = 1;
-//      stream_reqs[0].ipi = INIT_IPI;
-//      stream_reqs[0].req_type = SET_STREAM_ID(1) | (ADD_STREAM & 0x3);
-//      stream_reqs[0].time_info = TIME;
-//      t_last_req = 0;
-//    }
     n_stream_reqs = 0;
-#else
-    n_stream_reqs = 0;
-#endif /* JOINING_NODES */
-
     SCHEDULE_L(RTIMER_NOW() - 10, INIT_PERIOD * (uint32_t)(random_rand() % RTIMER_SECOND), g_sync);
   }
 
@@ -283,6 +319,56 @@ PROCESS_THREAD(lwb_init, ev, data)
 #if CONTROL_DC
     en_control = 0;
 #endif /* CONTROL_DC */
+  }
+
+  while (1) {
+    PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
+    ui8_n_polls++;
+      data_buf_t* p_buf;
+      while(ui8_rx_buf_element_count > 0) {
+        p_buf = list_head(rx_buffer_list);
+        if (p_output_fn) {
+          p_output_fn(p_buf->data, p_buf->ui8_data_size);
+        }
+        list_remove(rx_buffer_list, p_buf);
+        memb_free(&rx_buffer_memb, p_buf);
+        ui8_rx_buf_element_count--;
+      }
+  }
+
+  PROCESS_END();
+}
+
+
+PROCESS(lwb_int_test, "LWB interface test");
+AUTOSTART_PROCESSES(&lwb_int_test);
+
+void lwb_output(uint8_t* p_data, uint8_t ui8_len) {
+  printf("Data; %s, Len: %d\n", p_data, ui8_len);
+}
+
+static uint8_t test_counter = 0;
+static uint8_t tmp_buffer[128];
+
+PROCESS_THREAD(lwb_int_test, ev, data)
+{
+  static struct etimer et1;
+
+  PROCESS_BEGIN();
+
+  lwb_set_output_function(&lwb_output);
+  process_start(&lwb_init, NULL);
+
+
+  while(1) {
+
+    /* Delay 2-4 seconds */
+    etimer_set(&et1, CLOCK_SECOND * 2);
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et1));
+    int8_t ui8_len = sprintf(tmp_buffer, "This is count %u", test_counter);
+    tmp_buffer[ui8_len++] = '\0';
+    test_counter++;
+    lwb_input(tmp_buffer, ui8_len);
   }
 
   PROCESS_END();
