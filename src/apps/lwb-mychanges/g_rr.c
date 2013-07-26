@@ -5,7 +5,8 @@
  *      Author: fe
  */
 
-#define PKT_LEN_MAX (DATA_HEADER_LENGTH + N_STREAM_REQS_MAX * STREAM_REQ_LENGTH + DATA_LENGTH)
+//#define PKT_LEN_MAX (DATA_HEADER_LENGTH + N_STREAM_REQS_MAX * STREAM_REQ_LENGTH + DATA_LENGTH)
+#define PKT_LEN_MAX 102
 
 #define IS_THERE_DATA(a)      ((a & 0x3) == DATA)
 #define IS_STREAM_ACK(a)      ((a & 0x3) == STREAM_ACK)
@@ -28,41 +29,95 @@ void add_relay_cnt(uint16_t id, uint8_t relay_cnt) {
   n_streams++;
 }
 
-void prepare_data_packet(uint8_t free_slot) {
+//--------------------------------------------------------------------------------------------------
+void prepare_data_packet() {
+
+//  data_header.node_id = node_id;
+//  pkt_type = SET_N_STREAM_REQS(n_stream_reqs);
+//  pkt_type |= DATA;
+//
+//  uint8_t stream_reqs_len = GET_N_STREAM_REQS(pkt_type) * STREAM_REQ_LENGTH;
+//  uint8_t data_len = IS_THERE_DATA(pkt_type) * DATA_LENGTH;
+//  pkt_len = DATA_HEADER_LENGTH + stream_reqs_len + data_len;
+//  memcpy(pkt, &data_header, DATA_HEADER_LENGTH);
+//  memcpy(pkt + DATA_HEADER_LENGTH, stream_reqs, stream_reqs_len);
+//  memcpy(pkt + DATA_HEADER_LENGTH + stream_reqs_len, &data, data_len);
+
+  // At the moment, we do not send stream request packets along with data packets.
   data_header.node_id = node_id;
-  pkt_type = SET_N_STREAM_REQS(n_stream_reqs);
+  pkt_type = DATA;
+  memcpy(pkt, &data_header, DATA_HEADER_LENGTH);
+  pkt_len = DATA_HEADER_LENGTH;
 
-  if (!free_slot) {
-    pkt_type |= DATA;
-    data.en_on = energest_type_time(ENERGEST_TYPE_LISTEN) + energest_type_time(ENERGEST_TYPE_TRANSMIT);
+  data_buf_t* p_buf = list_head(tx_buffer_list);
+  if (p_buf) {
+    ui8_tx_buf_element_count--;
+    memcpy(pkt + DATA_HEADER_LENGTH, p_buf->data, p_buf->ui8_data_size);
+    pkt_len += p_buf->ui8_data_size;
+    list_remove(tx_buffer_list, p_buf);
+    memb_free(&tx_buffer_memb, p_buf);
+  } else{
+    // We don't have data to send. So only the data_header will be send (data length = 0)
+  }
+}
 
-    data.en_tot = energest_type_time(ENERGEST_TYPE_CPU) + energest_type_time(ENERGEST_TYPE_LPM);
+//--------------------------------------------------------------------------------------------------
+void prepare_stream_reqs_packet() {
 
-#if LATENCY
-    while (IS_LESS_EQ_THAN_TIME(data.gen_time + curr_ipi)) {
-      data.gen_time += curr_ipi;
-    }
-#endif /* LATENCY */
+  pkt_type = SET_N_STREAM_REQS(n_stream_reqs); // set number of stream requests
+  uint8_t stream_reqs_len = GET_N_STREAM_REQS(pkt_type) * STREAM_REQ_LENGTH;
 
+  data_header.node_id = node_id;
+  pkt_len = DATA_HEADER_LENGTH + stream_reqs_len;
+  memcpy(pkt, &data_header, DATA_HEADER_LENGTH);
+  memcpy(pkt + DATA_HEADER_LENGTH, stream_reqs, stream_reqs_len); // Copy the stream requests
+}
 
-#if LWB_DEBUG && !COOJA
-    data.relay_cnt = (relay_cnt_cnt) ?
-        ((relay_cnt_sum * RELAY_CNT_FACTOR) / relay_cnt_cnt) : (RELAY_CNT_INVALID);
-#if CONTROL_DC
-    data.en_control = en_control;
-#endif /* CONTROL_DC */
-#endif /* LWB_DEBUG && !COOJA */
+//--------------------------------------------------------------------------------------------------
+void inline receive_data_packet() {
+  uint8_t offest = DATA_HEADER_LENGTH + (GET_N_STREAM_REQS(pkt_type) * STREAM_REQ_LENGTH);
+  uint8_t len = get_data_len() - offest;
+
+  if (len == 0) {
+    // We don't have data in the packet. Skipping.
+    return;
   }
 
-#if FAIRNESS
-  stream_reqs[0].time_info = TIME + stream_reqs[0].ipi;
-#endif /* FAIRNESS */
-  uint8_t stream_reqs_len = GET_N_STREAM_REQS(pkt_type) * STREAM_REQ_LENGTH;
-  uint8_t data_len = IS_THERE_DATA(pkt_type) * DATA_LENGTH;
-  pkt_len = DATA_HEADER_LENGTH + stream_reqs_len + data_len;
-  memcpy(pkt, &data_header, DATA_HEADER_LENGTH);
-  memcpy(pkt + DATA_HEADER_LENGTH, stream_reqs, stream_reqs_len);
-  memcpy(pkt + DATA_HEADER_LENGTH + stream_reqs_len, &data, data_len);
+  data_buf_t* p_buf = memb_alloc(&rx_buffer_memb);
+  if (p_buf) {
+    memcpy(p_buf->data, pkt + offest, len);
+    p_buf->ui8_data_size = len;
+    list_add(rx_buffer_list, p_buf);
+    ui8_rx_buf_element_count++;
+    process_poll(&lwb_init);
+
+  } else {
+    buf_stats.ui16_rx_overflow++;
+  }
+}
+
+//--------------------------------------------------------------------------------------------------
+void inline process_stream_ack() {
+  update_control_dc();
+  // Copy the length of stream acks.
+  memcpy(&stream_ack_idx, pkt + DATA_HEADER_LENGTH, STREAM_ACK_IDX_LENGTH);
+  memcpy(stream_ack, pkt + DATA_HEADER_LENGTH + STREAM_ACK_IDX_LENGTH, stream_ack_idx * STREAM_ACK_LENGTH);
+  // Need to check whether my stream requests are acknowledged.
+  for (idx = 0; idx < stream_ack_idx; idx++) {
+    if (stream_ack[idx] == node_id) {
+      // The host has acknowledged a stream request.
+      n_stream_reqs--;
+      if (n_stream_reqs == 0) {
+        // All the stream requests are acknowledged.
+        joining_state = JOINED;
+      } else {
+        // we have some stream requests to be acknowledged.
+      }
+      curr_ipi = stream_reqs[0].ipi;
+    } else {
+      // The ACK for some other node.
+    }
+  }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -159,7 +214,7 @@ PT_THREAD(g_rr_host(struct rtimer *t, void *ptr)) {
       uint8_t rcvd = !!glossy_stop();
 
       if (snc[slot_idx] == 0) {
-        // we just sent a stream ack
+        // we just sent stream acks
         update_control_dc();
         memset(stream_ack, 0, STREAM_ACK_LENGTH);
         stream_ack_idx = 0;
@@ -173,9 +228,7 @@ PT_THREAD(g_rr_host(struct rtimer *t, void *ptr)) {
         pkt_type = get_header();
 
         if (rcvd && (id == data_header.node_id)) {
-          if (is_sink) {
             n_rcvd[id]++;
-          }
 
           /// @note Kasun: I don't understand this
 #if REMOVE_NODES
@@ -188,24 +241,11 @@ PT_THREAD(g_rr_host(struct rtimer *t, void *ptr)) {
           check_for_stream_requests();
 
           // Check whether we actually have data in the packet
-          if (IS_THERE_DATA(pkt_type) && is_sink) {
-            // We have data.
-            memcpy(&data, pkt + DATA_HEADER_LENGTH + GET_N_STREAM_REQS(pkt_type) * STREAM_REQ_LENGTH, IS_THERE_DATA(pkt_type) * DATA_LENGTH);
-
-            dc[id] = (uint16_t)((10000LLU * data.en_on) / data.en_tot);
-
-#if LATENCY
-            lat[id] += (TIME - data.gen_time);
-#endif /* LATENCY */
-
-#if LWB_DEBUG && !COOJA
-            rc[id] = data.relay_cnt;
-#if CONTROL_DC
-            dc_control[id] = (uint16_t)((10000LLU * data.en_control) / data.en_tot);
-#endif /* CONTROL_DC */
-#endif /* LWB_DEBUG && !COOJA */
+          if (IS_THERE_DATA(pkt_type)) {
+            receive_data_packet();
           }
         } else {
+
         }
 
       }
@@ -288,7 +328,7 @@ PT_THREAD(g_rr_source(struct rtimer *t, void *ptr)) {
 
       if (snc[slot_idx] == node_id) {
         // This is our slot. So we start Glossy as an initiator.
-        prepare_data_packet(0);
+        prepare_data_packet();
         glossy_start((uint8_t *)pkt,
                      pkt_len,
                      GLOSSY_INITIATOR,
@@ -321,45 +361,22 @@ PT_THREAD(g_rr_source(struct rtimer *t, void *ptr)) {
           if (glossy_stop()) {
             // We successfully received Glossy flooding.
             memcpy(&data_header, pkt, DATA_HEADER_LENGTH);
+            uint16_t id = snc[slot_idx];
             pkt_type = get_header();
 
             if (IS_STREAM_ACK(pkt_type)) {
               // This packet is an stream acknowledgment.
-              update_control_dc();
-              memcpy(&stream_ack_idx, pkt + DATA_HEADER_LENGTH, STREAM_ACK_IDX_LENGTH);
-              memcpy(stream_ack, pkt + DATA_HEADER_LENGTH + STREAM_ACK_IDX_LENGTH, stream_ack_idx * STREAM_ACK_LENGTH);
-              // Need to check whether my stream requests are acknowledged.
-              for (idx = 0; idx < stream_ack_idx; idx++) {
-                if (stream_ack[idx] == node_id) {
-                  // The host has acknowledged a stream request.
-                  n_stream_reqs--;
-                  if (n_stream_reqs == 0) {
-                    // All the stream requests are acknowledged.
-                    // Horray, we joined
-                    joining_state = JOINED;
-                  }
-                  curr_ipi = stream_reqs[0].ipi;
-                }
-              }
+              process_stream_ack();
+
             } else if (IS_THERE_DATA(pkt_type)){
               // This is a data packet
-              /// @todo Add this data packet to a queue and poll TCPIP process
-                uint16_t id = data_header.node_id;
-//
-//              if (id == snc[slot_idx]) {
-//                if (is_sink) {
-//                  // packet correctly received from a source node
-                n_rcvd[id]++;
-//
-//                }
-//                if (IS_THERE_DATA(pkt_type) && is_sink) {
-//                  memcpy(&data, pkt + DATA_HEADER_LENGTH + GET_N_STREAM_REQS(pkt_type) * STREAM_REQ_LENGTH, IS_THERE_DATA(pkt_type) * DATA_LENGTH);
-//
-//                  dc[id] = (uint16_t)((10000LLU * data.en_on) / data.en_tot);
-//
-//                }
-//              }
+              n_rcvd[id]++;
+              receive_data_packet();
+
+            } else {
+              // Unknown packet
             }
+
           } else {
             // We haven't received Glossy flooding.
           }
@@ -373,12 +390,11 @@ PT_THREAD(g_rr_source(struct rtimer *t, void *ptr)) {
       PT_YIELD(&pt_rr);
 
       leds_on(slot_idx + 1);
-      if (joining_state == JOINING && (sync_state == SYNCED || sync_state == QUASI_SYNCED) && is_source) {
-        n_stream_reqs = 1;
+      if (joining_state == JOINING && (sync_state == SYNCED || sync_state == QUASI_SYNCED) && n_stream_reqs > 0) {
+        // We are synchronized and have stream requests to send.
         if (rounds_to_wait == 0) {
           // try to join
-          joining_state = JUST_TRIED;
-          prepare_data_packet(1);
+          prepare_stream_reqs_packet();
           save_energest_values();
           glossy_start((uint8_t *)pkt,
                        pkt_len,
@@ -391,6 +407,11 @@ PT_THREAD(g_rr_source(struct rtimer *t, void *ptr)) {
                        (rtimer_callback_t)g_rr_source,
                        &rt,
                        NULL);
+
+          joining_state = JUST_TRIED;
+          n_joining_trials++;
+          rounds_to_wait = random_rand() % (1 << (n_joining_trials % 4));
+
         } else {
           // keep waiting, decrease the number of rounds to wait
           rounds_to_wait--;
@@ -406,9 +427,11 @@ PT_THREAD(g_rr_source(struct rtimer *t, void *ptr)) {
                        (rtimer_callback_t)g_rr_source,
                        &rt,
                        NULL);
+
         }
+
       } else {
-        // already joined or not SYNCED
+        // We are not synchronized or we don't have stream requests to send.
         save_energest_values();
         glossy_start((uint8_t *)pkt,
                      0,
@@ -433,35 +456,12 @@ PT_THREAD(g_rr_source(struct rtimer *t, void *ptr)) {
 #endif /* LWB_DEBUG */
 
     // schedule g_sync in 1 second
+    /// @note I don't understand why T_REF is used here.
+    ///       T_REF is updated when a schedule is received.
+    ///       Does this mean g_sync is scheduled to be run in 1 seconds from the time when the
+    ///       schedule is received from the host?
     SCHEDULE(T_REF, PERIOD_RT(1) - T_guard, g_sync);
     SYNC_LEDS();
-
-#if FAIRNESS
-    if (is_source && time >= (uint32_t)INIT_DELAY * TIME_SCALE) {
-      if ((TIME - t_last_req) / TIME_SCALE >= 300) {
-        // send a new request every 5 minutes
-        n_stream_reqs = 1;
-        stream_reqs[0].req_type = SET_STREAM_ID(1) | (REP_STREAM & 0x3);
-#if JOINING_NODES
-        joining_state = NOT_JOINED;
-#endif /* JOINING_NODES */
-        if ((time >= 2400LU * TIME_SCALE) && (node_id == 33)) {
-          stream_reqs[0].ipi = 1;
-        } else {
-          if ((time >= 4200LU * TIME_SCALE) && (node_id == 12 || node_id == 14 || node_id == 15 || node_id == 29)) {
-            stream_reqs[0].ipi = 1;
-          } else {
-            if (time >= 6000LU * TIME_SCALE) {
-              stream_reqs[0].ipi = 1;
-            } else {
-              stream_reqs[0].ipi = INIT_IPI;
-            }
-          }
-        }
-        t_last_req = TIME;
-      }
-    }
-#endif /* FAIRNESS */
 
     // copy the current schedule to old_sched
     old_sched = sched;
