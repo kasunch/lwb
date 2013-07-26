@@ -66,55 +66,52 @@ void del_stream(stream_info *stream) {
 //--------------------------------------------------------------------------------------------------
 void process_stream_req(uint16_t id, stream_req req) {
   stream_info *curr_stream;
-#if FAIRNESS
-  if (GET_STREAM_ID(req.req_type) == 1 &&
-      (id == 4 || id == 7 || id == 8 || id == 9 || id == 12 || id == 14 ||
-      id ==15 || id == 29 || id == 33)) {
-#else
+
   if (GET_STREAM_ID(req.req_type) <= 2 && id != node_id) {
-#endif /* FAIRNESS */
     // FIXME: temporary fix to filter out corrupted requests received during free slots
-  if (IS_STREAM_TO_ADD(req.req_type)) {
-    // check if there is already in the list a stream for this node with the same stream id
-    for (curr_stream = list_head(streams_list); curr_stream != NULL; curr_stream = curr_stream->next) {
-      if ((curr_stream->node_id == id) && (curr_stream->stream_id == GET_STREAM_ID(req.req_type))) {
-        // if so, do not add it: it's a duplicate
-#if REMOVE_NODES
-        // the node is still alive
-        curr_stream->n_cons_missed = 0;
-#endif /* REMOVE_NODES */
-        n_duplicates++;
-        return;
-      }
-    }
-    // add the new stream
-    add_stream(id, req);
-  } else {
-    if (IS_STREAM_TO_REP(req.req_type)) {
+    if (IS_STREAM_TO_ADD(req.req_type)) {
       // check if there is already in the list a stream for this node with the same stream id
       for (curr_stream = list_head(streams_list); curr_stream != NULL; curr_stream = curr_stream->next) {
-        if ((curr_stream->node_id == id) && (curr_stream->stream_id == GET_STREAM_ID(req.req_type))) {
-          // if so, remove it in order to replace it with the new stream
-          del_stream(curr_stream);
-          break;
+        if ((curr_stream->node_id == id) &&
+            (curr_stream->stream_id == GET_STREAM_ID(req.req_type))) {
+          // if so, do not add it: it's a duplicate
+#if REMOVE_NODES
+          // the node is still alive
+          curr_stream->n_cons_missed = 0;
+#endif /* REMOVE_NODES */
+          n_duplicates++;
+          return;
         }
       }
       // add the new stream
       add_stream(id, req);
-      n_replaced++;
     } else {
-      if (IS_STREAM_TO_DEL(req.req_type)) {
+      if (IS_STREAM_TO_REP(req.req_type)) {
         // check if there is already in the list a stream for this node with the same stream id
         for (curr_stream = list_head(streams_list); curr_stream != NULL; curr_stream = curr_stream->next) {
-          if ((curr_stream->node_id == id) && (curr_stream->stream_id == GET_STREAM_ID(req.req_type))) {
+          if ((curr_stream->node_id == id) &&
+              (curr_stream->stream_id == GET_STREAM_ID(req.req_type))) {
             // if so, remove it in order to replace it with the new stream
             del_stream(curr_stream);
             break;
           }
         }
+        // add the new stream
+        add_stream(id, req);
+        n_replaced++;
+      } else {
+        if (IS_STREAM_TO_DEL(req.req_type)) {
+          // check if there is already in the list a stream for this node with the same stream id
+          for (curr_stream = list_head(streams_list); curr_stream != NULL; curr_stream = curr_stream->next) {
+            if ((curr_stream->node_id == id) && (curr_stream->stream_id == GET_STREAM_ID(req.req_type))) {
+              // if so, remove it in order to replace it with the new stream
+              del_stream(curr_stream);
+              break;
+            }
+          }
+        }
       }
     }
-  }
   }
 }
 
