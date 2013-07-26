@@ -20,6 +20,7 @@
 #define DYNAMIC_FREE_SLOTS           1
 #define TWO_SCHEDS                   1
 #define CONTROL_DC                   1
+#define MINIMIZE_LATENCY             1
 
 #ifndef TIME_SCALE
 #define TIME_SCALE                   1
@@ -101,32 +102,36 @@ typedef struct {
 
 #define DATA_HEADER_LENGTH 4
 
-typedef struct {
-  uint32_t en_on;
-  uint32_t en_tot;
-#if LATENCY
-  uint16_t gen_time;
-#endif /* LATENCY */
+//typedef struct {
+//  uint32_t en_on;
+//  uint32_t en_tot;
+//#if LATENCY
+//  uint16_t gen_time;
+//#endif /* LATENCY */
+//
+//
+//#if !COOJA
+//#if LWB_DEBUG
+//  uint32_t en_control;
+//  uint8_t  relay_cnt;
+//#if (!(LATENCY || MOBILE || USERINT_INT))
+//  uint8_t  foo[2];
+//#endif /* (!(LATENCY || MOBILE)) */
+//#else
+//#if LATENCY || MOBILE
+//  uint8_t  foo[5];
+//#elif USERINT_INT
+//  uint8_t  foo[3];
+//#else
+//  uint8_t  foo[7];
+//#endif /* LATENCY */
+//#endif /* LWB_DEBUG */
+//#endif /* !COOJA */
+//} data_struct;
 
 
-#if !COOJA
-#if LWB_DEBUG
-  uint32_t en_control;
-  uint8_t  relay_cnt;
-#if (!(LATENCY || MOBILE || USERINT_INT))
-  uint8_t  foo[2];
-#endif /* (!(LATENCY || MOBILE)) */
-#else
-#if LATENCY || MOBILE
-  uint8_t  foo[5];
-#elif USERINT_INT
-  uint8_t  foo[3];
-#else
-  uint8_t  foo[7];
-#endif /* LATENCY */
-#endif /* LWB_DEBUG */
-#endif /* !COOJA */
-} data_struct;
+
+
 #if COOJA
 #define DATA_LENGTH 10
 #else
@@ -203,6 +208,7 @@ PT_THREAD(g_rr_host(struct rtimer *t, void *ptr));
 PT_THREAD(g_rr_source(struct rtimer *t, void *ptr));
 PROCESS_NAME(print);
 PROCESS_NAME(scheduler);
+PROCESS_NAME(lwb_init);
 
 #if JOINING_NODES
 enum {
@@ -234,5 +240,8 @@ enum {
 #ifndef RELAY_CNT_FACTOR
 #define RELAY_CNT_FACTOR            16
 #endif /* RELAY_CNT_FACTOR */
+
+void lwb_input(uint8_t* p_data, uint8_t ui8_len);
+void lwb_set_output_function(void (*p_fn)(uint8_t*, uint8_t));
 
 #endif /* LWB_H */
