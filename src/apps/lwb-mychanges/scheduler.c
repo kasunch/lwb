@@ -323,7 +323,7 @@ void compute_schedule(void) {
   }
 
   // random initial position in the list
-  uint16_t rand_init_pos = random_rand() % n_streams;
+  uint16_t rand_init_pos = 0; //random_rand() % n_streams;
   uint16_t i;
   curr_stream = list_head(streams_list);
   // make curr_stream point to the random initial position
