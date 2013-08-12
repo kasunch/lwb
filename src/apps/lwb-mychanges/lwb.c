@@ -203,6 +203,7 @@ stream_info* get_stream_from_id(uint16_t id) {
 #define SET_N_FREE(a)       (a << 6)
 #define GET_N_SLOTS(a)      (a & 0x3f)
 
+//--------------------------------------------------------------------------------------------------
 #define MAX_BUF_ELEMENT_SIZE 102
 
 #define MAX_TX_BUF_SIZE 500
@@ -237,12 +238,9 @@ typedef struct buffer_stats {
 
 static buffer_stats_t buf_stats;
 
+//--------------------------------------------------------------------------------------------------
 void lwb_input(uint8_t* p_data, uint8_t ui8_len) {
-  // Hack to avoid packet input for host node
-  /// TODO Remove this.
-  if (is_host) {
-    return;
-  }
+
   data_buf_t* p_buf = memb_alloc(&tx_buffer_memb);
   if (p_buf) {
     memcpy(p_buf->data, p_data, ui8_len);
@@ -263,12 +261,26 @@ void lwb_input(uint8_t* p_data, uint8_t ui8_len) {
   }
 }
 
+//--------------------------------------------------------------------------------------------------
 void lwb_set_output_function(void (*p_fn)(uint8_t*, uint8_t)) {
   p_output_fn = p_fn;
 }
 
+//--------------------------------------------------------------------------------------------------
 PROCESS(lwb_init, "LWB init");
 //AUTOSTART_PROCESSES(&lwb_init);
+
+uint16_t ui16_echo_counter = 0;
+uint32_t ui32_latency = 0;
+
+enum {
+  PRINT_STATE_SENT,
+  PRINT_STATE_RECEIVED,
+  PRINT_STATE_DONE
+};
+
+uint8_t ui8_print_state = 0;
+
 
 #if COMPRESS
 #include "compress.c"
@@ -278,7 +290,10 @@ PROCESS(lwb_init, "LWB init");
 #include "g_rr.c"
 #include "print.c"
 
+//--------------------------------------------------------------------------------------------------
+#include "uip-net.h"
 
+//--------------------------------------------------------------------------------------------------
 PROCESS_THREAD(lwb_init, ev, data)
 {
   PROCESS_BEGIN();
@@ -302,10 +317,12 @@ PROCESS_THREAD(lwb_init, ev, data)
 
   if (is_host) {
     scheduler_init();
-    SCHEDULE_L(RTIMER_NOW() - 10, INIT_PERIOD * (uint32_t)RTIMER_SECOND, g_sync);
+    //SCHEDULE_L(RTIMER_NOW() - 10, INIT_PERIOD * (uint32_t)RTIMER_SECOND, g_sync);
+    SCHEDULE_L(RTIMER_NOW() - 10, INIT_PERIOD * (uint32_t)RTIMER_SECOND * 20, g_sync);
   } else {
     n_stream_reqs = 0;
-    SCHEDULE_L(RTIMER_NOW() - 10, INIT_PERIOD * (uint32_t)(random_rand() % RTIMER_SECOND), g_sync);
+    //SCHEDULE_L(RTIMER_NOW() - 10, INIT_PERIOD * (uint32_t)(random_rand() % RTIMER_SECOND), g_sync);
+    SCHEDULE_L(RTIMER_NOW() - 10, INIT_PERIOD * RTIMER_SECOND, g_sync);
   }
 
   if (INIT_DELAY) {
@@ -343,12 +360,121 @@ PROCESS_THREAD(lwb_init, ev, data)
 PROCESS(lwb_int_test, "LWB interface test");
 AUTOSTART_PROCESSES(&lwb_int_test);
 
-void lwb_output(uint8_t* p_data, uint8_t ui8_len) {
-  printf("Data; %s, Len: %d\n", p_data, ui8_len);
+#define UIP_IP_BUF   ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
+#define UIP_UDP_BUF  ((struct uip_udp_hdr *)&uip_buf[UIP_LLIPH_LEN])
+
+//--------------------------------------------------------------------------------------------------
+void lwb_tcp_output(uint8_t* p_data, uint8_t ui8_len) {
+  //printf("Data Len: %u\n", ui8_len);
+  memcpy((uint8_t *)UIP_IP_BUF, p_data, ui8_len);
+  uip_len = ui8_len;
+  tcpip_input();
 }
 
-static uint8_t test_counter = 0;
-static uint8_t tmp_buffer[128];
+//--------------------------------------------------------------------------------------------------
+uint8_t lwb_tcpip_input(uip_lladdr_t *a) {
+  lwb_input((uint8_t *)UIP_IP_BUF, uip_len);
+  return 1;
+}
+
+//--------------------------------------------------------------------------------------------------
+
+enum {
+  ECHO_MSG_TYPE_REQ = 1,
+  ECHO_MSG_TYPE_RES
+};
+
+typedef struct echo_msg {
+  uint8_t ui8_type;
+  uint8_t ui8_counter_l;
+  uint8_t ui8_counter_h;
+
+} echo_msg_t;
+
+
+static rtimer_clock_t clock_start, clock_end;
+static uint8_t ui8_retry_count = 0;
+
+static struct uip_udp_conn *client_conn;
+static struct uip_udp_conn *server_conn;
+static uip_ipaddr_t ipaddr;
+
+#ifndef ECHO_CLIENT
+#define ECHO_CLIENT         3
+#endif // ECHO_CLIENT
+#ifndef ECHO_SERVER
+#define ECHO_SERVER         4
+#endif // ECHO_SERVER
+#define MAX_RETRY           20
+#define UDP_PORT            UIP_HTONS(20220)
+
+//--------------------------------------------------------------------------------------------------
+void udp_handle_server_read()
+{
+  if(uip_newdata())
+  {
+    echo_msg_t* p_msg = (echo_msg_t*)uip_appdata;
+
+    if (p_msg->ui8_type == ECHO_MSG_TYPE_REQ)
+    {
+      echo_msg_t res;
+      res.ui8_counter_l = p_msg->ui8_counter_l;
+      res.ui8_counter_h = p_msg->ui8_counter_h;
+      res.ui8_type = ECHO_MSG_TYPE_RES;
+
+      uip_ipaddr_copy(&server_conn->ripaddr, &UIP_IP_BUF->srcipaddr);
+      uip_udp_packet_send(server_conn, &res, sizeof(echo_msg_t));
+      // Restore server connection to allow data from any node
+      memset(&server_conn->ripaddr, 0, sizeof(server_conn->ripaddr));
+    }
+    else
+    {
+      printf("Invalid msg\n");
+    }
+  }
+}
+
+//--------------------------------------------------------------------------------------------------
+void udp_handle_client_read()
+{
+  if(uip_newdata())
+  {
+    clock_end = RTIMER_NOW();
+    echo_msg_t* p_msg = (echo_msg_t*)uip_appdata;
+
+    if (p_msg->ui8_type == ECHO_MSG_TYPE_RES)
+    {
+      uint16_t c = (uint16_t)p_msg->ui8_counter_l + ((uint16_t)(p_msg->ui8_counter_h) << 8);
+
+      if (c == ui16_echo_counter)
+      {
+        UNSET_PIN_ADC7;
+        ui32_latency = (clock_end - clock_start) * 1e6 / RTIMER_SECOND;
+        //ui8_print_state = PRINT_STATE_RECEIVED;
+        ui8_print_state = PRINT_STATE_DONE;
+        ui16_echo_counter++;
+      }
+      else
+      {
+        printf("invalid counter\n");
+      }
+    }
+    else
+    {
+      printf("invalid response message\n");
+    }
+  }
+}
+
+//--------------------------------------------------------------------------------------------------
+static void
+set_global_address(void)
+{
+  uip_ipaddr_t node_ipaddr;
+  uip_ip6addr(&node_ipaddr, 0xfe80, 0, 0, 0, 0x200, 0, 0, node_id);
+  uip_ds6_addr_add(&node_ipaddr, 0, ADDR_MANUAL);
+}
+//--------------------------------------------------------------------------------------------------
 
 PROCESS_THREAD(lwb_int_test, ev, data)
 {
@@ -356,19 +482,91 @@ PROCESS_THREAD(lwb_int_test, ev, data)
 
   PROCESS_BEGIN();
 
-  lwb_set_output_function(&lwb_output);
+  process_start(&tcpip_process, NULL);
+  tcpip_set_outputfunc(&lwb_tcpip_input);
+
+  lwb_set_output_function(&lwb_tcp_output);
   process_start(&lwb_init, NULL);
 
+  set_global_address();
 
-  while(1) {
-
-    /* Delay 2-4 seconds */
+  if (node_id == ECHO_SERVER)
+  {
+    server_conn = udp_new(NULL, UDP_PORT, NULL);
+    udp_bind(server_conn, UDP_PORT);
+  }
+  else if (node_id == ECHO_CLIENT)
+  {
+    // set connection address.
+    uip_ip6addr(&ipaddr, 0xfe80, 0, 0, 0, 0x200, 0, 0, ECHO_SERVER);
+    client_conn = udp_new(&ipaddr, UDP_PORT, NULL);
+    udp_bind(client_conn, UDP_PORT);
     etimer_set(&et1, CLOCK_SECOND * 2);
-    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et1));
-    int8_t ui8_len = sprintf(tmp_buffer, "This is count %u", test_counter);
-    tmp_buffer[ui8_len++] = '\0';
-    test_counter++;
-    lwb_input(tmp_buffer, ui8_len);
+  }
+
+  ui16_echo_counter = 0;
+  INIT_PIN_ADC7_OUT;
+  UNSET_PIN_ADC7;
+
+  ui8_print_state = PRINT_STATE_DONE;
+
+  while(1)
+  {
+    PROCESS_YIELD();
+
+    if (node_id == ECHO_CLIENT)
+    {
+        if(ev == tcpip_event)
+        {
+          udp_handle_client_read();
+
+        }
+        else if (ev == PROCESS_EVENT_TIMER)
+        {
+            if (ui8_print_state == PRINT_STATE_DONE)
+            { // we received a replay to the request we've sent.
+              echo_msg_t msg;
+              msg.ui8_counter_l = (uint8_t)(ui16_echo_counter & 0xFF);
+              msg.ui8_counter_h = (uint8_t)(ui16_echo_counter >> 8);
+              msg.ui8_type = ECHO_MSG_TYPE_REQ;
+              clock_start = RTIMER_NOW();
+              SET_PIN_ADC7;
+              ui8_print_state = PRINT_STATE_SENT;
+              uip_udp_packet_send(client_conn, &msg, sizeof(echo_msg_t));
+              ui8_retry_count = 0;
+
+            }
+            else
+            { // Still we haven't received a reply
+              ui8_retry_count++; // Increase retry count.
+
+              if (ui8_retry_count == MAX_RETRY)
+              { // Maximum retry count reached. We proceed with the next request.
+                ui8_print_state = PRINT_STATE_DONE;
+                UNSET_PIN_ADC7;
+              }
+
+            }
+
+          etimer_set(&et1, CLOCK_SECOND * 2);
+
+        }
+        else
+        {
+          // Do nothing. Some other event.
+        }
+    }
+    else if (node_id == ECHO_SERVER)
+    {
+      if(ev == tcpip_event)
+      {
+        udp_handle_server_read();
+      }
+    }
+    else
+    {
+      // Other node
+    }
   }
 
   PROCESS_END();
