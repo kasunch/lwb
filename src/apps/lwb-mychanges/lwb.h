@@ -21,6 +21,7 @@
 #define TWO_SCHEDS                   1
 #define CONTROL_DC                   1
 #define MINIMIZE_LATENCY             1
+#define LONG_SLOTS                   1
 
 #ifndef TIME_SCALE
 #define TIME_SCALE                   1
