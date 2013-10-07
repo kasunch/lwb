@@ -1,1 +1,0 @@
-msp430-objcopy lwb.sky -O ihex lwb.hex && scp lwb.hex laptop: && ssh laptop "killall -9 serialdump-linux &> /dev/null; cd optimizeMac/code/contiki/tools/sky && ./msp430-bsl-linux --telosb -c /dev/ttyUSB0 -e -r -p ~/lwb.hex"
