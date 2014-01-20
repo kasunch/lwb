@@ -59,7 +59,7 @@ static inline uint8_t radio_status(void) {
 	return status;
 }
 static inline void radio_flush_rx(void) {
-	uint8_t dummy;
+	uint8_t dummy  __attribute__((unused));
 	FASTSPI_READ_FIFO_BYTE(dummy);
 	FASTSPI_STROBE(CC2420_SFLUSHRX);
 	FASTSPI_STROBE(CC2420_SFLUSHRX);
