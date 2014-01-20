@@ -33,7 +33,7 @@
  * \file
  *         Device driver for the ST M25P80 40MHz 1Mbyte external memory.
  * \author
- *         Björn Grönvall <bg@sics.se>
+ *         Bjï¿½rn Grï¿½nvall <bg@sics.se>
  *
  *         Data is written bit inverted (~-operator) to flash so that
  *         unwritten data will read as zeros (UNIX style).
@@ -199,7 +199,7 @@ xmem_pread(void *_p, int size, unsigned long offset)
   return size;
 }
 /*---------------------------------------------------------------------------*/
-static const char *
+static const unsigned char *
 program_page(unsigned long offset, const unsigned char *p, int nbytes)
 {
   const unsigned char *end = p + nbytes;
