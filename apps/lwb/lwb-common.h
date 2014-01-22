@@ -255,7 +255,11 @@ typedef struct stream_req_lst_item {
 /// @brief Gap between slots (4 ms).
 #define T_GAP                       (RTIMER_SECOND / 250)           // 04 ms
 /// @brief Glossy duration for data slots (20 ms)
-#define T_RR_ON                     (RTIMER_SECOND / 50)            // 20 ms
+#if COOJA
+#define T_RR_ON                     (RTIMER_SECOND / 25)            // 40 ms
+#else
+#define T_RR_ON                     (RTIMER_SECOND / 40)            // 25 ms
+#endif
 /// @brief Glossy duration for free slots
 #define T_FREE_ON                   (RTIMER_SECOND / 100)           // 10 ms
 
