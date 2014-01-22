@@ -4,8 +4,6 @@
 #ifndef CONTIKI_CONF_H
 #define CONTIKI_CONF_H
 
-#include "lwb-conf.h"
-
 #if TINYOS
 #define TINYOS_SERIAL_FRAMES 1
 #endif
