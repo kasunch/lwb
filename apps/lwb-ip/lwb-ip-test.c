@@ -3,37 +3,55 @@
 #include "contiki.h"
 #include "lwb.h"
 
+#include "uip6/uip.h"
+#include "uip6/uip-ds6.h"
+#include "uip6/psock.h"
+
 
 PROCESS(lwb_test_process, "lwb test");
 AUTOSTART_PROCESSES(&lwb_test_process);
 
 
-#define LWB_HOST_ID             1
-#define LWB_DATA_ECHO_CLIENT    4
-#define LWB_DATA_ECHO_SERVER    5
+#define LWB_CONF_HOST_ID             1
+#define LWB_CONF_DATA_ECHO_CLIENT    4
+#define LWB_CONF_DATA_ECHO_SERVER    5
 
+#define TCP_PORT            UIP_HTONS(20222)
+
+#define UIP_IP_BUF   ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
+#define UIP_UDP_BUF  ((struct uip_udp_hdr *)&uip_buf[UIP_LLIPH_LEN])
+
+enum {
+  ECHO_MSG_TYPE_REQ = 1,
+  ECHO_MSG_TYPE_RES
+};
+
+typedef struct echo_msg {
+  uint8_t ui8_type;
+  uint8_t ui8_counter_l;
+  uint8_t ui8_counter_h;
+} echo_msg_t;
 
 extern uint16_t node_id;
 
-static struct etimer et1;
-static uint8_t ui8_i = 0;
-static uint8_t buffer[50];
-static uint8_t ui8_buf_len = 0;
+static uip_ipaddr_t ipaddr;
+uint16_t ui16_echo_counter = 0;
+echo_msg_t echo_msg_buf;
+struct psock p_socket;
+
+//--------------------------------------------------------------------------------------------------
+uint8_t lwb_tcpip_input(uip_lladdr_t *a) {
+    printf("uip output len %u\n", uip_len);
+    lwb_queue_packet((uint8_t *)UIP_IP_BUF, uip_len, 0);
+    return 1;
+}
 
 //--------------------------------------------------------------------------------------------------
 void on_data(uint8_t *p_data, uint8_t ui8_len, uint16_t ui16_from_id) {
-
-    if (node_id == LWB_DATA_ECHO_SERVER) {
-
-        printf("server: on_data from %u : %s\n", ui16_from_id, (char*)p_data);
-
-        ui8_buf_len = (uint8_t)sprintf((char*)buffer, "echo %s", (char*)p_data);
-        lwb_queue_packet(buffer, ui8_buf_len, LWB_DATA_ECHO_CLIENT);
-
-    } else if(node_id == LWB_DATA_ECHO_CLIENT) {
-
-        printf("client: on_data from %u : %s\n", ui16_from_id, (char*)p_data);
-    }
+    printf("uip input len %u\n", ui8_len);
+    memcpy((uint8_t *)UIP_IP_BUF, p_data, ui8_len);
+    uip_len = ui8_len;
+    tcpip_input();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -44,37 +62,123 @@ void on_schedule_end(void) {
 lwb_callbacks_t lwb_callbacks = {on_data, on_schedule_end};
 
 //--------------------------------------------------------------------------------------------------
+static void
+set_global_address(void)
+{
+    uip_ipaddr_t node_ipaddr;
+    uip_ip6addr(&node_ipaddr, 0xfec0, 0, 0, 0, 0, 0, 0, node_id);
+    uip_ds6_addr_add(&node_ipaddr, 0, ADDR_MANUAL);
+}
+
+//--------------------------------------------------------------------------------------------------
+static PT_THREAD(server_handler())
+{
+    PSOCK_BEGIN(&p_socket);
+
+    PSOCK_WAIT_UNTIL(&p_socket, PSOCK_NEWDATA(&p_socket));
+
+    PSOCK_READBUF_LEN(&p_socket, sizeof(echo_msg_t));
+
+    if (echo_msg_buf.ui8_type == ECHO_MSG_TYPE_REQ) {
+
+        uint16_t c = (uint16_t)echo_msg_buf.ui8_counter_l + ((uint16_t)(echo_msg_buf.ui8_counter_h) << 8);
+        printf("server read counter %u\n", c);
+
+        echo_msg_buf.ui8_type = ECHO_MSG_TYPE_RES;
+        PSOCK_SEND(&p_socket, (uint8_t *) &echo_msg_buf, sizeof(echo_msg_t));
+    }
+
+    PSOCK_END(&p_socket);
+
+    return PT_ENDED;
+}
+
+//--------------------------------------------------------------------------------------------------
+static PT_THREAD(client_handler())
+{
+    PSOCK_BEGIN(&p_socket);
+
+    echo_msg_buf.ui8_counter_l = (uint8_t)(ui16_echo_counter & 0xFF);
+    echo_msg_buf.ui8_counter_h = (uint8_t)(ui16_echo_counter >> 8);
+    echo_msg_buf.ui8_type = ECHO_MSG_TYPE_REQ;
+
+    PSOCK_SEND(&p_socket, (uint8_t *) &echo_msg_buf, sizeof(echo_msg_t));
+
+    printf("sent counter : %u\n", ui16_echo_counter);
+
+    PSOCK_WAIT_UNTIL(&p_socket, PSOCK_NEWDATA(&p_socket));
+
+    PSOCK_READBUF_LEN(&p_socket, sizeof(echo_msg_t));
+
+    if (echo_msg_buf.ui8_type == ECHO_MSG_TYPE_RES) {
+
+        uint16_t c = (uint16_t)echo_msg_buf.ui8_counter_l + ((uint16_t)(echo_msg_buf.ui8_counter_h) << 8);
+        printf("received echo counter %u\n", c);
+        ui16_echo_counter++;
+    }
+
+    PSOCK_END(&p_socket);
+
+    return PT_ENDED;
+}
+
+//--------------------------------------------------------------------------------------------------
 PROCESS_THREAD(lwb_test_process, ev, data)
 {
     PROCESS_BEGIN();
 
-    if(node_id == LWB_HOST_ID) {
-
+    if(node_id == LWB_CONF_HOST_ID) {
         lwb_init(LWB_MODE_HOST, &lwb_callbacks);
-
     } else {
-
         lwb_init(LWB_MODE_SOURCE, &lwb_callbacks);
-
-        if (node_id == LWB_DATA_ECHO_CLIENT) {
-
-            lwb_request_stream_add(2, 2);
-
-            etimer_set(&et1, CLOCK_SECOND * 2);
-
-            while (1) {
-                PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et1));
-                ui8_buf_len = (uint8_t)sprintf((char*)buffer, "count %u", ui8_i++);
-                lwb_queue_packet(buffer, ui8_buf_len, LWB_DATA_ECHO_SERVER);
-                etimer_set(&et1, CLOCK_SECOND * 2);
-            }
-        } else if (node_id == LWB_DATA_ECHO_SERVER) {
-
-            lwb_request_stream_add(2, 2);
-
-        }
     }
 
+    set_global_address();
+    tcpip_set_outputfunc(&lwb_tcpip_input);
+    process_start(&tcpip_process, NULL);
+
+    if (node_id == LWB_CONF_DATA_ECHO_SERVER) {
+        lwb_request_stream_add(1, 0);
+        tcp_listen(TCP_PORT);
+    } else if (node_id == LWB_CONF_DATA_ECHO_CLIENT) {
+        lwb_request_stream_add(1, 0);
+        uip_ip6addr(&ipaddr, 0xfec0, 0, 0, 0, 0, 0, 0, LWB_CONF_DATA_ECHO_SERVER);
+        tcp_connect(&ipaddr, TCP_PORT, NULL);
+    }
+
+    while (1) {
+
+        PROCESS_WAIT_EVENT_UNTIL(ev == tcpip_event);
+
+        if (uip_connected()) {
+
+            printf("connected\n");
+            PSOCK_INIT(&p_socket, (uint8_t *) &echo_msg_buf, sizeof(echo_msg_t));
+
+            while(!(uip_aborted() || uip_closed() || uip_timedout())) {
+
+                PROCESS_YIELD();
+
+                if (node_id == LWB_CONF_DATA_ECHO_CLIENT) {
+
+                    if (ev == tcpip_event) {
+
+                        client_handler();
+
+                    } else {
+                        // Other events
+                    }
+
+                } else if (node_id == LWB_CONF_DATA_ECHO_SERVER) {
+
+                    server_handler();
+
+                } else {
+                    // Other nodes
+                }
+            }
+        }
+    }
 
     PROCESS_END();
 
