@@ -169,7 +169,10 @@ timerb1_interrupt(void)
 			asm volatile("nop");
 			asm volatile("nop");
 			// relay the packet
+#if !COOJA
 			radio_start_tx();
+#endif // !COOJA
+
 			// read TBIV to clear IFG
 			tbiv = TBIV;
 			glossy_end_rx();
@@ -657,7 +660,9 @@ inline void glossy_end_rx(void) {
 	// read the remaining bytes from the RXFIFO
 	FASTSPI_READ_FIFO_NO_WAIT(&packet[bytes_read], packet_len_tmp - bytes_read + 1);
 	bytes_read = packet_len_tmp + 1;
+
 #if COOJA
+	radio_start_tx();
 	if ((GLOSSY_CRC_FIELD & FOOTER1_CRC_OK) && ((GLOSSY_HEADER_FIELD & GLOSSY_HEADER_MASK) == GLOSSY_HEADER)) {
 #else
 	if (GLOSSY_CRC_FIELD & FOOTER1_CRC_OK) {
