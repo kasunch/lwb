@@ -1,0 +1,757 @@
+#include "contiki.h"
+#include "dev/leds.h"
+#include "lib/memb.h"
+#include "lib/list.h"
+#include "lib/random.h"
+
+#include "glossy.h"
+
+#include "lwb.h"
+#include "lwb-common.h"
+#include "lwb-macros.h"
+#include "lwb-g-sync.h"
+#include "lwb-g-rr.h"
+#include "lwb-scheduler.h"
+#include "lwb-sched-compressor.h"
+
+#include "lwb-print.h"
+
+
+
+#ifndef LWB_CONF_MAX_DATA_BUF_ELEMENTS
+#define LWB_CONF_MAX_DATA_BUF_ELEMENTS              5
+#endif
+
+#ifndef LWB_CONF_MAX_STREAM_REQ_ELEMENTS
+#define LWB_CONF_MAX_STREAM_REQ_ELEMENTS            5
+#endif
+
+
+extern uint16_t node_id;
+
+extern lwb_context_t lwb_context;
+
+PROCESS_NAME(lwb_main_process);
+
+/// @brief We use the same proto thread for both host and source since only one mode is active at a time.
+static struct pt pt_lwb_g_rr;
+/// @brief Iterator for slot index
+static uint8_t ui8_slot_idx = 0;
+/// @brief Glossy header (Packet type)
+static uint8_t ui8_g_header = 0;
+
+/// @brief Buffers for TX and RX
+MEMB(mmb_data_buf, data_buf_lst_item_t, LWB_CONF_MAX_DATA_BUF_ELEMENTS);
+/// @brief Transmit data buffer element list
+LIST(lst_tx_buf_queue);
+/// @brief Receive data buffer element list
+LIST(lst_rx_buf_queue);
+/// @brief Number of data packets to be sent over LWB
+static uint8_t ui8_tx_buf_q_size = 0;
+/// @brief Number of data packets to be delivered to the application layer
+static uint8_t ui8_rx_buf_q_size = 0;
+
+/// @brief Memory block allocation space for stream requests
+MEMB(mmb_stream_req, stream_req_lst_item_t, LWB_CONF_MAX_STREAM_REQ_ELEMENTS);
+/// @brief List for stream requests to be sent
+LIST(lst_stream_req);
+/// @brief Number of stream requests to be sent
+static uint8_t ui8_stream_reqs_lst_size = 0;
+/// @brief The ID of the next stream request
+static uint8_t ui8_stream_id_next = 1;
+
+static uint8_t ui8_n_rounds_to_wait = 0;
+
+static uint8_t ui8_n_trials = 0;
+
+
+//--------------------------------------------------------------------------------------------------
+void lwb_g_rr_init() {
+    PT_INIT(&pt_lwb_g_rr);
+
+    memb_init(&mmb_data_buf);
+    list_init(lst_tx_buf_queue);
+    list_init(lst_rx_buf_queue);
+    ui8_tx_buf_q_size = 0;
+    ui8_rx_buf_q_size = 0;
+
+    memb_init(&mmb_stream_req);
+    list_init(lst_stream_req);
+    ui8_stream_reqs_lst_size = 0;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+static void prepare_data_packet() {
+
+    data_buf_lst_item_t* p_buf_item = list_head(lst_tx_buf_queue);
+    uint8_t ui8_n_possible = 0;
+    stream_req_lst_item_t* p_req_item;
+    uint8_t ui8_c;
+
+    if (p_buf_item && (LWB_CONF_MAX_TXRX_BUF_LEN > p_buf_item->buf.header.ui8_data_len + sizeof(data_header_t))) {
+        // We have enough space on the buffer to send data. This is just a sanity check.
+
+        // First, we copy the data. The data header will be copied later at the end.
+        // We may need to update options of the data header if we have stream requests to be sent.
+        memcpy(lwb_context.ui8arr_txrx_buf + sizeof(data_header_t),
+                p_buf_item->buf.data,
+                p_buf_item->buf.header.ui8_data_len);
+        lwb_context.ui8_txrx_buf_len = sizeof(data_header_t) + p_buf_item->buf.header.ui8_data_len;
+
+
+        if (lwb_context.ui8_lwb_mode == LWB_MODE_SOURCE && ui8_stream_reqs_lst_size > 0) {
+            // We have some stream requests pending to be sent. Let's try to include them in the data packet
+            ui8_n_possible = (LWB_CONF_MAX_TXRX_BUF_LEN - lwb_context.ui8_txrx_buf_len) / sizeof(lwb_stream_req_t);
+
+            // Iterate through all stream requests and try to include them into one packet.
+            // Here, we do not remove any of the stream requests from the list as they may need to be resent
+            // in a later time if no acknowledgments are received.
+            for (p_req_item = list_head(lst_stream_req), ui8_c = 0;
+                 p_req_item != NULL && ui8_c < ui8_n_possible;
+                 p_req_item = p_req_item->next, ui8_c++) {
+
+                memcpy(lwb_context.ui8arr_txrx_buf + lwb_context.ui8_txrx_buf_len,
+                        &p_req_item->req,
+                        sizeof(lwb_stream_req_t));
+
+                lwb_context.ui8_txrx_buf_len += sizeof(lwb_stream_req_t);
+            }
+
+            p_buf_item->buf.header.ui8_options = LWB_PKT_TYPE_STREAM_REQ | ui8_c << 4;
+
+            // Update the stats
+            LWB_STATS_STREAM_REQ_ACK(ui16_n_req_tx) += ui8_c;
+        }
+
+        // Now we copy the header
+        memcpy(lwb_context.ui8arr_txrx_buf, &p_buf_item->buf.header, sizeof(data_header_t));
+
+        list_remove(lst_tx_buf_queue, p_buf_item);
+        memb_free(&mmb_data_buf, p_buf_item);
+        ui8_tx_buf_q_size--;
+        LWB_STATS_DATA(ui16_n_tx)++;
+
+    } else {
+        // We don't have enough space in the buffer
+    }
+
+}
+
+//--------------------------------------------------------------------------------------------------
+static void prepare_stream_acks() {
+
+    lwb_context.ui8arr_txrx_buf[0] = lwb_context.ui8_n_stream_acks;
+    memcpy(lwb_context.ui8arr_txrx_buf + 1, lwb_context.ui16arr_stream_akcs, 2 * lwb_context.ui8_n_stream_acks);
+    lwb_context.ui8_txrx_buf_len = 1 + 2 * lwb_context.ui8_n_stream_acks;
+
+    LWB_STATS_STREAM_REQ_ACK(ui16_n_ack_tx) += lwb_context.ui8_n_stream_acks;
+
+    lwb_context.ui8_n_stream_acks = 0;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+static void process_stream_acks() {
+
+    uint8_t ui8_n_acks = lwb_context.ui8arr_txrx_buf[0]; // first byte is the number of acknowledgments
+    uint16_t ui16_ack_node_id;
+    stream_req_lst_item_t* p_req_item;
+
+    // Just validate the stream acknowledgments data
+    if (lwb_context.ui8_txrx_buf_len < 1 + (ui8_n_acks * 2)) {
+        return;
+    }
+
+
+    LWB_STATS_STREAM_REQ_ACK(ui16_n_ack_rx) += ui8_n_acks;
+
+    // iterate through all stream acknowledgments. There are acknowledgments for us, we remove
+    // stored stream requests from the front of the list.
+    for (; ui8_n_acks > 0; ui8_n_acks--) {
+
+        ui16_ack_node_id = (uint16_t)lwb_context.ui8arr_txrx_buf[ui8_n_acks * 2] << 8 |
+                           (uint16_t)lwb_context.ui8arr_txrx_buf[ui8_n_acks * 2 - 1];
+
+        if (ui16_ack_node_id == node_id && (p_req_item = list_head(lst_stream_req))) {
+
+            list_remove(lst_stream_req, p_req_item);
+            memb_free(&mmb_stream_req, p_req_item);
+            ui8_stream_reqs_lst_size--;
+        }
+    }
+
+    if (ui8_stream_reqs_lst_size == 0) {
+        /// @todo Hooray..! we are joined????????
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+static void process_stream_reqs() {
+
+    lwb_stream_req_header_t header;
+    lwb_stream_req_t stream_req;
+    uint8_t ui8_i;
+
+    if (lwb_context.ui8_txrx_buf_len < sizeof(lwb_stream_req_header_t)) {
+        return;
+    }
+
+    memcpy(&header, lwb_context.ui8arr_txrx_buf, sizeof(lwb_stream_req_header_t));
+
+    if (lwb_context.ui8_txrx_buf_len < sizeof(lwb_stream_req_header_t) + header.ui8_n_reqs * sizeof(lwb_stream_req_t)) {
+        return;
+    }
+
+
+    for (ui8_i = 0; ui8_i < lwb_context.ui8_n_stream_acks; ui8_i++) {
+        if (header.ui16_from_id == lwb_context.ui16arr_stream_akcs[ui8_i]) {
+            // We already processed a stream request from this node in this round
+            return;
+        }
+    }
+
+    if (lwb_context.ui8_n_stream_acks >= LWB_CONF_SCHED_MAX_SLOTS) {
+        // Maximum space for stream acks exceeded.
+        // We just ignore the stream requests.
+        return;
+    }
+
+    // Add the node id for sending acknowledgments.
+    lwb_context.ui16arr_stream_akcs[lwb_context.ui8_n_stream_acks++] = header.ui16_from_id;
+
+    for (ui8_i = 0; ui8_i < header.ui8_n_reqs; ui8_i++) {
+        memcpy(&stream_req,
+               lwb_context.ui8arr_txrx_buf + sizeof(lwb_stream_req_header_t)  + ui8_i * sizeof(lwb_stream_req_t),
+               sizeof(lwb_stream_req_t));
+        lwb_sched_process_stream_req(header.ui16_from_id, &stream_req);
+    }
+
+    LWB_STATS_STREAM_REQ_ACK(ui16_n_req_rx) += ui8_i;
+}
+
+//--------------------------------------------------------------------------------------------------
+static void prepare_stream_reqs() {
+
+    uint8_t ui8_n_possible = (LWB_CONF_MAX_TXRX_BUF_LEN - sizeof(lwb_stream_req_header_t)) / sizeof(lwb_stream_req_t);
+    lwb_stream_req_header_t header;
+    stream_req_lst_item_t* p_req_item;
+    uint8_t ui8_c;
+
+    lwb_context.ui8_txrx_buf_len = sizeof(lwb_stream_req_header_t);
+
+    // Iterate through all stream requests and try to include them into one packet.
+    // Here, we do not remove any of the stream requests from the list as they may need to be resent
+    // in a later time if no acknowledgments are received.
+    for (p_req_item = list_head(lst_stream_req), ui8_c = 0;
+         p_req_item != NULL && ui8_c < ui8_n_possible;
+         p_req_item = p_req_item->next, ui8_c++) {
+
+        memcpy(lwb_context.ui8arr_txrx_buf + lwb_context.ui8_txrx_buf_len,
+                &p_req_item->req,
+                sizeof(lwb_stream_req_t));
+
+        lwb_context.ui8_txrx_buf_len += sizeof(lwb_stream_req_t);
+    }
+
+    // Update the stats
+    LWB_STATS_STREAM_REQ_ACK(ui16_n_req_tx) += ui8_c;
+
+    header.ui16_from_id = node_id;
+    header.ui8_n_reqs = ui8_c;
+    memcpy(lwb_context.ui8arr_txrx_buf, &header, sizeof(lwb_stream_req_header_t));
+}
+
+//--------------------------------------------------------------------------------------------------
+static void process_data_packet() {
+
+    // Just a sanity check
+    if (lwb_context.ui8_txrx_buf_len < sizeof(data_header_t)) {
+        return;
+    }
+
+    data_buf_lst_item_t* p_item = memb_alloc(&mmb_data_buf);
+
+    if (!p_item) {
+        LWB_STATS_DATA(ui16_n_rx_nospace)++;
+        return;
+    }
+
+    LWB_STATS_DATA(ui16_n_rx)++;
+
+    memcpy(&p_item->buf.header, lwb_context.ui8arr_txrx_buf, sizeof(data_header_t));
+
+    if (p_item->buf.header.ui16_to_id != node_id && p_item->buf.header.ui16_to_id != 0) {
+        // We drop this packet
+        memb_free(&mmb_data_buf, p_item);
+        LWB_STATS_DATA(ui16_n_rx_dropped)++;
+        return;
+    }
+
+    // Copy the data into the buffer and add to the queue
+    memcpy(p_item->buf.data,
+           lwb_context.ui8arr_txrx_buf + sizeof(data_header_t),
+           p_item->buf.header.ui8_data_len);
+    list_add(lst_rx_buf_queue, p_item);
+    ui8_rx_buf_q_size++;
+
+    // Poll the LWB main process to deliver data to APP layer
+    LWB_SET_POLL_FLAG(LWB_POLL_FLAGS_DATA);
+    process_poll(&lwb_main_process);
+
+    // This part is only for the host node
+    if (lwb_context.ui8_lwb_mode == LWB_MODE_HOST) {
+
+        lwb_stream_req_t stream_req;
+
+        if ((p_item->buf.header.ui8_options & 0x0f) == LWB_PKT_TYPE_STREAM_REQ) {
+            // There are some stream requests in the data packet
+            uint8_t ui8_n_reqs = p_item->buf.header.ui8_options >> 4; // extract number of requests
+            uint8_t ui8_i = 0;
+
+            for (; ui8_i < ui8_n_reqs; ui8_i++) {
+
+                memcpy(&stream_req,
+                       lwb_context.ui8arr_txrx_buf +
+                                   sizeof(data_header_t) +
+                                   p_item->buf.header.ui8_data_len +
+                                   ui8_i * sizeof(lwb_stream_req_t),
+                       sizeof(lwb_stream_req_t));
+                lwb_sched_process_stream_req(p_item->buf.header.ui16_from_id, &stream_req);
+            }
+        }
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
+    PT_BEGIN(&pt_lwb_g_rr);
+
+    while (1) {
+        leds_on(LEDS_GREEN);
+
+        for (ui8_slot_idx = 0; ui8_slot_idx < N_CURRENT_DATA_SLOTS(); ui8_slot_idx++) {
+
+            // schedule Glossy for the next slot
+            SCHEDULE(lwb_context.ui16_t_sync_ref,
+                     T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)),
+                     lwb_g_rr_host);
+            PT_YIELD(&pt_lwb_g_rr);
+
+            if (CURRENT_SCHEDULE().ui16arr_slots[ui8_slot_idx] == 0) {
+                // We have stream acknowledgment(s) to be sent.
+                prepare_stream_acks();
+                glossy_start(lwb_context.ui8arr_txrx_buf,
+                             lwb_context.ui8_txrx_buf_len,
+                             GLOSSY_INITIATOR,
+                             GLOSSY_NO_SYNC,
+                             N_RR,
+                             LWB_PKT_TYPE_STREAM_ACK,
+                             lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                             (rtimer_callback_t)lwb_g_rr_host,
+                             &lwb_context.rt,
+                             &lwb_context);
+
+                PT_YIELD(&pt_lwb_g_rr);
+
+                glossy_stop();
+
+            } else if (CURRENT_SCHEDULE().ui16arr_slots[ui8_slot_idx] == node_id)  {
+                // This is my slot (allocated for the host)
+            } else {
+                // The slot belongs to some other node
+                glossy_start(lwb_context.ui8arr_txrx_buf,
+                             0,
+                             GLOSSY_RECEIVER,
+                             GLOSSY_NO_SYNC,
+                             N_RR,
+                             0,
+                             lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                             (rtimer_callback_t)lwb_g_rr_host,
+                             &lwb_context.rt,
+                             &lwb_context);
+
+                PT_YIELD(&pt_lwb_g_rr);
+
+                if (glossy_stop()) {
+                    // RX count is greater than zero i.e. Glossy received a packet
+                    ui8_g_header = get_header();
+                    lwb_context.ui8_txrx_buf_len = get_data_len();
+
+                    if (ui8_g_header == LWB_PKT_TYPE_DATA) {
+                        // Data packet
+                        process_data_packet();
+                    } else {
+                        // Unknown packets
+                        /// @todo add stats about unknown packets.
+                    }
+
+                } else {
+                    // we haven't received Glossy flooding.
+                    /// @todo Add stats about not received Glossy floodings.
+                }
+            }
+        }
+
+
+        // We've iterated through all the data/ack slots. Now it is time for contention slots
+
+        for (;ui8_slot_idx < N_CURRENT_DATA_SLOTS() + N_CURRENT_FREE_SLOTS(); ui8_slot_idx++) {
+
+            // schedule Glossy for the next slot.
+            SCHEDULE(lwb_context.ui16_t_sync_ref,
+                     T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)),
+                     lwb_g_rr_host);
+            PT_YIELD(&pt_lwb_g_rr);
+
+            glossy_start(lwb_context.ui8arr_txrx_buf,
+                         0,
+                         GLOSSY_RECEIVER,
+                         GLOSSY_NO_SYNC,
+                         N_RR,
+                         0,
+                         lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_FREE_ON,
+                         (rtimer_callback_t)lwb_g_rr_host,
+                         &lwb_context.rt,
+                         &lwb_context);
+
+            PT_YIELD(&pt_lwb_g_rr);
+
+            if (glossy_stop()) {
+                // RX count is greater than zero i.e. Glossy received a packet
+                ui8_g_header = get_header();
+                lwb_context.ui8_txrx_buf_len = get_data_len();
+
+                if (ui8_g_header == LWB_PKT_TYPE_STREAM_REQ) {
+                    // Stream requests
+                    process_stream_reqs();
+                } else {
+                    // Unknown packets
+                    /// @todo add stats about unknown packets.
+                }
+
+            } else {
+                // we haven't received Glossy flooding.
+                /// @todo Add stats about not received Glossy floodings.
+            }
+
+        }
+
+
+        // Copy current schedule to old schedule
+        memcpy(&OLD_SCHEDULE(), &CURRENT_SCHEDULE(), sizeof(lwb_schedule_t));
+
+        // Compute new schedule
+        lwb_sched_compute_schedule(&CURRENT_SCHEDULE());
+
+        /// @todo Compress and copy the schedule to buffer
+        memcpy(lwb_context.ui8arr_txrx_buf, &CURRENT_SCHEDULE_INFO(), sizeof(lwb_sched_info_t));
+        lwb_context.ui8_txrx_buf_len = sizeof(lwb_sched_info_t);
+        lwb_context.ui8_txrx_buf_len += lwb_sched_compress(&CURRENT_SCHEDULE(),
+                                                           lwb_context.ui8arr_txrx_buf + lwb_context.ui8_txrx_buf_len,
+                                                           LWB_CONF_MAX_TXRX_BUF_LEN - lwb_context.ui8_txrx_buf_len);
+
+        LWB_SET_POLL_FLAG(LWB_POLL_FLAGS_SCHED_END);
+        process_poll(&lwb_main_process);
+        process_poll(&lwb_print);
+
+        // Schedule next Glossy synchronization based on old period.
+        if (OLD_SCHEDULE_INFO().ui8_T == 1) {
+            SCHEDULE(lwb_context.ui16_t_sync_ref,
+                     RTIMER_SECOND + (lwb_context.i32_skew / (int32_t)64) - lwb_context.ui16_t_sync_guard,
+                     lwb_g_sync_host);
+        } else{
+            // Round period is not 1 second. Therefore, we use rtimer_set_long()
+            SCHEDULE_L(lwb_context.ui16_t_sync_ref,
+                       (OLD_SCHEDULE_INFO().ui8_T * (uint32_t)RTIMER_SECOND) +
+                               ((int32_t)OLD_SCHEDULE_INFO().ui8_T * lwb_context.i32_skew / (int32_t)64) -
+                               lwb_context.ui16_t_sync_guard,
+                       lwb_g_sync_host);
+        }
+
+        leds_off(LEDS_GREEN);
+
+        PT_YIELD(&pt_lwb_g_rr);
+
+    }
+
+    PT_END(&pt_lwb_g_rr);
+    return PT_ENDED;
+}
+
+//--------------------------------------------------------------------------------------------------
+PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
+    PT_BEGIN(&pt_lwb_g_rr);
+
+    // The first slot starts after 3 * T_GAP from the end of Glossy phase for schedule.
+    // starting time of a slot = T_REF + (3 * T_GAP) + (slot_idx * (T_RR_ON + T_GAP))
+    // end time of a slot      = T_REF + T_SYNC_ON + (3 * T_GAP) + (slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON
+
+    while (1) {
+        leds_on(LEDS_GREEN);
+
+        for (ui8_slot_idx = 0; ui8_slot_idx < N_CURRENT_DATA_SLOTS(); ui8_slot_idx++) {
+
+            // schedule Glossy for the next slot
+            SCHEDULE(lwb_context.ui16_t_sync_ref,
+                     T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)),
+                     lwb_g_rr_source);
+            PT_YIELD(&pt_lwb_g_rr);
+
+
+            if (CURRENT_SCHEDULE().ui16arr_slots[ui8_slot_idx] == node_id) {
+                // This is our slot. Now we can become the initiator.
+
+                if (ui8_tx_buf_q_size != 0) {
+                    // We have something to send
+                    prepare_data_packet();
+                    glossy_start(lwb_context.ui8arr_txrx_buf,
+                                 lwb_context.ui8_txrx_buf_len,
+                                 GLOSSY_INITIATOR,
+                                 GLOSSY_NO_SYNC,
+                                 N_RR,
+                                 LWB_PKT_TYPE_DATA,
+                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                                 (rtimer_callback_t)lwb_g_rr_source,
+                                 &lwb_context.rt,
+                                 &lwb_context);
+
+                    PT_YIELD(&pt_lwb_g_rr);
+                    glossy_stop();
+
+                } else {
+                    // Ohh...we have nothing to send even though this is our slot. We just stay silent.
+                }
+
+            } else {
+                // This is not our time slot. So we become receiver to receive Glossy flooding.
+                glossy_start(lwb_context.ui8arr_txrx_buf,
+                             0,
+                             GLOSSY_RECEIVER,
+                             GLOSSY_NO_SYNC,
+                             N_RR,
+                             0,
+                             lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                             (rtimer_callback_t)lwb_g_rr_source,
+                             &lwb_context.rt,
+                             &lwb_context);
+
+                PT_YIELD(&pt_lwb_g_rr);
+
+                if (glossy_stop()) {
+                    // RX count is greater than zero i.e. Glossy received a packet
+                    ui8_g_header = get_header();
+                    lwb_context.ui8_txrx_buf_len = get_data_len();
+
+                    if (ui8_g_header == LWB_PKT_TYPE_STREAM_ACK) {
+                        // Stream ACKs
+                        process_stream_acks();
+                    } else if (ui8_g_header == LWB_PKT_TYPE_DATA) {
+                        // Data packet
+                        process_data_packet();
+                    } else {
+                        // Unknown packets
+                        /// @todo add stats about unknown packets.
+                    }
+
+                } else {
+                    // we haven't received Glossy flooding.
+                    /// @todo Add stats about not received Glossy floodings.
+                }
+            }
+
+        }
+
+        // We've iterated through all the data/ack slots. Now it is time for contention slots
+
+        for (;ui8_slot_idx < N_CURRENT_DATA_SLOTS() + N_CURRENT_FREE_SLOTS(); ui8_slot_idx++) {
+
+            // schedule Glossy for the next slot.
+            SCHEDULE(lwb_context.ui16_t_sync_ref,
+                     T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)),
+                     lwb_g_rr_source);
+            PT_YIELD(&pt_lwb_g_rr);
+
+            if (ui8_stream_reqs_lst_size > 0) {
+                if (ui8_n_rounds_to_wait == 0) {
+                    // We have some stream requests to be sent
+                    prepare_stream_reqs();
+                    glossy_start(lwb_context.ui8arr_txrx_buf,
+                                 lwb_context.ui8_txrx_buf_len,
+                                 GLOSSY_INITIATOR,
+                                 GLOSSY_NO_SYNC,
+                                 N_RR,
+                                 LWB_PKT_TYPE_STREAM_REQ,
+                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_FREE_ON,
+                                 (rtimer_callback_t)lwb_g_rr_source,
+                                 &lwb_context.rt,
+                                 &lwb_context);
+
+                    PT_YIELD(&pt_lwb_g_rr);
+
+                    glossy_stop();
+                    ui8_n_trials++;
+                    // Calculate the number of trials to wait before trying next
+                    ui8_n_rounds_to_wait = (uint8_t)random_rand() % (1 << (ui8_n_trials % 4));
+                } else {
+                    // We have to wait. So, we just participate to the flooding
+                    glossy_start(lwb_context.ui8arr_txrx_buf,
+                                 0,
+                                 GLOSSY_RECEIVER,
+                                 GLOSSY_NO_SYNC,
+                                 N_RR,
+                                 0,
+                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_FREE_ON,
+                                 (rtimer_callback_t)lwb_g_rr_source,
+                                 &lwb_context.rt,
+                                 &lwb_context);
+
+                    PT_YIELD(&pt_lwb_g_rr);
+                    glossy_stop();
+                    ui8_n_rounds_to_wait--;
+                }
+
+            } else {
+                // We just participate to the flooding
+                glossy_start(lwb_context.ui8arr_txrx_buf,
+                             0,
+                             GLOSSY_RECEIVER,
+                             GLOSSY_NO_SYNC,
+                             N_RR,
+                             0,
+                             lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_FREE_ON,
+                             (rtimer_callback_t)lwb_g_rr_source,
+                             &lwb_context.rt,
+                             &lwb_context);
+
+                PT_YIELD(&pt_lwb_g_rr);
+                glossy_stop();
+            }
+
+        }
+
+
+        // Copy current schedule to old schedule
+        memcpy(&OLD_SCHEDULE(), &CURRENT_SCHEDULE(), sizeof(lwb_schedule_t));
+
+        LWB_SET_POLL_FLAG(LWB_POLL_FLAGS_SCHED_END);
+        process_poll(&lwb_main_process);
+        process_poll(&lwb_print);
+
+        // Now, we have iterated through all the data and free slots.
+        // We have to schedule for receiving next round's schedule.
+
+        if (OLD_SCHEDULE_INFO().ui8_T == 1) {
+            SCHEDULE(lwb_context.ui16_t_sync_ref,
+                     (uint32_t)RTIMER_SECOND + (lwb_context.i32_skew / (int32_t)64) - lwb_context.ui16_t_sync_guard,
+                     lwb_g_sync_source);
+        } else {
+            // Round period is not 1 second. Therefore, we use rtimer_set_long()
+            SCHEDULE_L(lwb_context.ui16_t_sync_ref,
+                       (OLD_SCHEDULE_INFO().ui8_T * (uint32_t)RTIMER_SECOND) +
+                           ((int32_t)OLD_SCHEDULE_INFO().ui8_T * lwb_context.i32_skew / (int32_t)64) -
+                           lwb_context.ui16_t_sync_guard,
+                       lwb_g_sync_source);
+        }
+
+        leds_off(LEDS_GREEN);
+        PT_YIELD(&pt_lwb_g_rr);
+    }
+
+
+    PT_END(&pt_lwb_g_rr);
+    return PT_ENDED;
+}
+
+//--------------------------------------------------------------------------------------------------
+uint8_t lwb_g_rr_queue_packet(uint8_t* p_data, uint8_t ui8_len, uint16_t ui16_to_node_id) {
+
+    data_buf_lst_item_t* p_item = memb_alloc(&mmb_data_buf);
+
+    if (p_item && (LWB_CONF_MAX_TXRX_BUF_LEN > ui8_len + sizeof(data_header_t))) {
+
+        p_item->buf.header.ui16_from_id = node_id;
+        p_item->buf.header.ui16_to_id = ui16_to_node_id;
+        p_item->buf.header.ui8_data_len = ui8_len;
+        p_item->buf.header.ui8_options = 0;
+        memcpy(p_item->buf.data, p_data, ui8_len);
+        list_add(lst_tx_buf_queue, p_item);
+        ui8_tx_buf_q_size++;
+        return 1;
+    }
+
+    LWB_STATS_DATA(ui16_n_tx_nospace)++;
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------------------
+void lwb_g_rr_data_output() {
+
+    data_buf_lst_item_t* p_item = NULL;
+    while((p_item = list_head(lst_rx_buf_queue))) {
+
+        if (lwb_context.p_callbacks && lwb_context.p_callbacks->p_on_data) {
+
+            lwb_context.p_callbacks->p_on_data(p_item->buf.data,
+                                               p_item->buf.header.ui8_data_len,
+                                               p_item->buf.header.ui16_from_id);
+        }
+
+        list_remove(lst_rx_buf_queue, p_item);
+        memb_free(&mmb_data_buf, p_item);
+        ui8_rx_buf_q_size--;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+uint8_t lwb_g_rr_stream_add(uint16_t ui16_ipi, uint16_t ui16_time_offset) {
+
+    stream_req_lst_item_t* p_req_item = memb_alloc(&mmb_stream_req);
+
+    if (!p_req_item) {
+        return 0;
+    }
+
+    p_req_item->req.ui16_ipi = ui16_ipi;
+    p_req_item->req.ui16_time_info = ui16_time_offset;
+    SET_STREAM_TYPE(p_req_item->req.ui8_req_type, LWB_STREAM_TYPE_ADD);
+    SET_STREAM_ID(p_req_item->req.ui8_req_type, ui8_stream_id_next);
+    list_add(lst_stream_req, p_req_item);
+    ui8_stream_reqs_lst_size++;
+
+    return ui8_stream_id_next++;
+}
+
+//--------------------------------------------------------------------------------------------------
+void lwb_g_rr_stream_del(uint8_t ui8_id) {
+
+    stream_req_lst_item_t* p_req_item = memb_alloc(&mmb_stream_req);
+
+    if (!p_req_item) {
+        return;
+    }
+
+    p_req_item->req.ui16_ipi = 0;
+    p_req_item->req.ui16_time_info = 0;
+    SET_STREAM_TYPE(p_req_item->req.ui8_req_type, LWB_STREAM_TYPE_DEL);
+    SET_STREAM_ID(p_req_item->req.ui8_req_type, ui8_id);
+    list_add(lst_stream_req, p_req_item);
+    ui8_stream_reqs_lst_size++;
+}
+
+//--------------------------------------------------------------------------------------------------
+void lwb_g_rr_stream_mod(uint8_t ui8_id, uint16_t ui16_ipi) {
+    stream_req_lst_item_t* p_req_item = memb_alloc(&mmb_stream_req);
+
+    if (!p_req_item) {
+        return;
+    }
+
+    p_req_item->req.ui16_ipi = ui16_ipi;
+    p_req_item->req.ui16_time_info = 0;
+    SET_STREAM_TYPE(p_req_item->req.ui8_req_type, LWB_STREAM_TYPE_MOD);
+    SET_STREAM_ID(p_req_item->req.ui8_req_type, ui8_id);
+    list_add(lst_stream_req, p_req_item);
+    ui8_stream_reqs_lst_size++;
+}

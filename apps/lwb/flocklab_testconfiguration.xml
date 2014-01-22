@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testConf xmlns="http://www.flocklab.ethz.ch" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.flocklab.ethz.ch xml/flocklab.xsd">
+    <!-- General configuration -->
+    <generalConf>
+        <name>lwb-test</name>
+        <description>test</description>
+        <scheduleAsap>
+            <durationSecs>600</durationSecs>
+        </scheduleAsap>
+        <emailResults>no</emailResults>
+    </generalConf>
+
+    <!-- Target configuration -->
+    <!-- Normal nodes -->
+    <targetConf>
+        <!-- obsIds>001 002 004 006 007 008 010 011 013 014 015 016 017 018 019 020 022 023 024 025 026 027 028 031 032 033 200 201 202 204</obsIds -->
+        <obsIds>001 002 004 006 007 008 011 013 014 015 016 017 018 019 020 022 023 024 025 026 027 028 031 032 033 200 202 204</obsIds>
+        <voltage>3.3</voltage>
+        <dbImageId>0</dbImageId>
+    </targetConf>
+
+    <!-- Serial Reader Service configuration -->
+    <serialConf>
+        <obsIds>001 002 004 006 007 008 011 013 014 015 016 017 018 019 020 022 023 024 025 026 027 028 031 032 033 200 202 204</obsIds>
+        <port>usb</port>
+        <baudrate>115200</baudrate>
+        <mode>ascii</mode>
+    </serialConf>
+    
+    <!-- gpioTracingConf>
+      <obsIds>001 002 004 006 007 008 010 011 013 014 015 016 017 018 019 020 022 023 024 025 026 027 028 031 032 033 200 201 202 204</obsIds>
+      
+      <pinConf>
+        <pin>LED1</pin>
+        <edge>both</edge>
+        <mode>continuous</mode>
+      </pinConf>
+      <pinConf>
+        <pin>LED2</pin>
+        <edge>both</edge>
+        <mode>continuous</mode>
+      </pinConf>
+      <pinConf>
+        <pin>LED3</pin>
+        <edge>both</edge>
+        <mode>continuous</mode>
+      </pinConf>
+      <pinConf>
+        <pin>INT1</pin>
+        <edge>both</edge>
+        <mode>continuous</mode>
+      </pinConf>
+      <pinConf>
+        <pin>INT2</pin>
+        <edge>both</edge>
+        <mode>continuous</mode>
+      </pinConf>
+    </gpioTracingConf -->
+
+</testConf>
