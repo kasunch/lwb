@@ -276,7 +276,7 @@ PROCESS_THREAD(glossy_process, ev, data) {
 		// any other process to run while Glossy is running
 		while (GLOSSY_IS_ON() && RTIMER_CLOCK_LT(RTIMER_NOW(), t_stop));
 #if COOJA
-		while (state == GLOSSY_STATE_TRANSMITTING);
+		//while (state == GLOSSY_STATE_TRANSMITTING);
 #endif /* COOJA */
 		// Glossy finished: execute the callback function
 		dint();
