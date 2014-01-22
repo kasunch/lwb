@@ -13,8 +13,8 @@
     <motedelay_us>1000000</motedelay_us>
     <radiomedium>
       org.contikios.mrm.MRM
-      <bg_noise_var value="30.0" />
       <bg_noise_mean value="-79.0" />
+      <bg_noise_var value="30.0" />
       <obstacles />
     </radiomedium>
     <events>
@@ -24,7 +24,7 @@
       org.contikios.cooja.mspmote.SkyMoteType
       <identifier>sky1</identifier>
       <description>Sky Mote Type #sky1</description>
-      <firmware EXPORT="copy">[CONFIG_DIR]/lwb-test.sky</firmware>
+      <firmware EXPORT="copy">[CONFIG_DIR]/lwb-ip-test.sky</firmware>
       <moteinterface>org.contikios.cooja.interfaces.Position</moteinterface>
       <moteinterface>org.contikios.cooja.interfaces.RimeAddress</moteinterface>
       <moteinterface>org.contikios.cooja.interfaces.IPAddress</moteinterface>
@@ -157,7 +157,7 @@
   <plugin>
     org.contikios.cooja.plugins.SimControl
     <width>280</width>
-    <z>1</z>
+    <z>2</z>
     <height>160</height>
     <location_x>400</location_x>
     <location_y>0</location_y>
@@ -181,12 +181,12 @@
   <plugin>
     org.contikios.cooja.plugins.LogListener
     <plugin_config>
-      <filter>ID:4 client</filter>
+      <filter>ID:4</filter>
       <formatted_time />
       <coloring />
     </plugin_config>
     <width>702</width>
-    <z>2</z>
+    <z>1</z>
     <height>466</height>
     <location_x>227</location_x>
     <location_y>171</location_y>
@@ -203,13 +203,12 @@
       <mote>6</mote>
       <mote>7</mote>
       <showRadioRXTX />
-      <showRadioChannels />
       <showRadioHW />
       <showLEDs />
-      <zoomfactor>650.1435543921298</zoomfactor>
+      <zoomfactor>740.4019329773126</zoomfactor>
     </plugin_config>
     <width>1799</width>
-    <z>4</z>
+    <z>0</z>
     <height>321</height>
     <location_x>52</location_x>
     <location_y>686</location_y>
@@ -247,7 +246,7 @@
       <resolution>325</resolution>
     </plugin_config>
     <width>557</width>
-    <z>0</z>
+    <z>4</z>
     <height>656</height>
     <location_x>1359</location_x>
     <location_y>5</location_y>
@@ -255,7 +254,7 @@
   <plugin>
     org.contikios.cooja.plugins.LogListener
     <plugin_config>
-      <filter>ID:5 server</filter>
+      <filter>ID:5</filter>
       <formatted_time />
       <coloring />
     </plugin_config>
