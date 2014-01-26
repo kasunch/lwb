@@ -13,8 +13,12 @@ AUTOSTART_PROCESSES(&lwb_test_process);
 
 
 #define LWB_CONF_HOST_ID             1
-#define LWB_CONF_DATA_ECHO_CLIENT    4
-#define LWB_CONF_DATA_ECHO_SERVER    5
+
+#define LWB_CONF_DATA_ECHO_CLIENT    2
+#define LWB_CONF_DATA_ECHO_SERVER    3
+
+//#define LWB_CONF_DATA_ECHO_CLIENT    7
+//#define LWB_CONF_DATA_ECHO_SERVER    11
 
 #define TCP_PORT            UIP_HTONS(20222)
 
@@ -26,7 +30,7 @@ enum {
   ECHO_MSG_TYPE_RES
 };
 
-typedef struct echo_msg {
+typedef struct __attribute__ ((__packed__)) echo_msg {
   uint8_t ui8_type;
   uint8_t ui8_counter_l;
   uint8_t ui8_counter_h;
@@ -41,14 +45,12 @@ struct psock p_socket;
 
 //--------------------------------------------------------------------------------------------------
 uint8_t lwb_tcpip_input(uip_lladdr_t *a) {
-    printf("uip output len %u\n", uip_len);
     lwb_queue_packet((uint8_t *)UIP_IP_BUF, uip_len, 0);
     return 1;
 }
 
 //--------------------------------------------------------------------------------------------------
 void on_data(uint8_t *p_data, uint8_t ui8_len, uint16_t ui16_from_id) {
-    printf("uip input len %u\n", ui8_len);
     memcpy((uint8_t *)UIP_IP_BUF, p_data, ui8_len);
     uip_len = ui8_len;
     tcpip_input();
@@ -82,7 +84,7 @@ static PT_THREAD(server_handler())
     if (echo_msg_buf.ui8_type == ECHO_MSG_TYPE_REQ) {
 
         uint16_t c = (uint16_t)echo_msg_buf.ui8_counter_l + ((uint16_t)(echo_msg_buf.ui8_counter_h) << 8);
-        printf("server read counter %u\n", c);
+        printf("received %u\n", c);
 
         echo_msg_buf.ui8_type = ECHO_MSG_TYPE_RES;
         PSOCK_SEND(&p_socket, (uint8_t *) &echo_msg_buf, sizeof(echo_msg_t));
@@ -102,9 +104,9 @@ static PT_THREAD(client_handler())
     echo_msg_buf.ui8_counter_h = (uint8_t)(ui16_echo_counter >> 8);
     echo_msg_buf.ui8_type = ECHO_MSG_TYPE_REQ;
 
-    PSOCK_SEND(&p_socket, (uint8_t *) &echo_msg_buf, sizeof(echo_msg_t));
+    printf("sending %u\n", ui16_echo_counter);
 
-    printf("sent counter : %u\n", ui16_echo_counter);
+    PSOCK_SEND(&p_socket, (uint8_t *) &echo_msg_buf, sizeof(echo_msg_t));
 
     PSOCK_WAIT_UNTIL(&p_socket, PSOCK_NEWDATA(&p_socket));
 
@@ -113,7 +115,7 @@ static PT_THREAD(client_handler())
     if (echo_msg_buf.ui8_type == ECHO_MSG_TYPE_RES) {
 
         uint16_t c = (uint16_t)echo_msg_buf.ui8_counter_l + ((uint16_t)(echo_msg_buf.ui8_counter_h) << 8);
-        printf("received echo counter %u\n", c);
+        printf("received %u\n", c);
         ui16_echo_counter++;
     }
 
@@ -133,9 +135,9 @@ PROCESS_THREAD(lwb_test_process, ev, data)
         lwb_init(LWB_MODE_SOURCE, &lwb_callbacks);
     }
 
-    set_global_address();
     tcpip_set_outputfunc(&lwb_tcpip_input);
     process_start(&tcpip_process, NULL);
+    set_global_address();
 
     if (node_id == LWB_CONF_DATA_ECHO_SERVER) {
         lwb_request_stream_add(1, 0);
@@ -159,17 +161,11 @@ PROCESS_THREAD(lwb_test_process, ev, data)
 
                 PROCESS_YIELD();
 
-                if (node_id == LWB_CONF_DATA_ECHO_CLIENT) {
+                if (node_id == LWB_CONF_DATA_ECHO_CLIENT && ev == tcpip_event) {
 
-                    if (ev == tcpip_event) {
+                    client_handler();
 
-                        client_handler();
-
-                    } else {
-                        // Other events
-                    }
-
-                } else if (node_id == LWB_CONF_DATA_ECHO_SERVER) {
+                } else if (node_id == LWB_CONF_DATA_ECHO_SERVER && ev == tcpip_event) {
 
                     server_handler();
 
