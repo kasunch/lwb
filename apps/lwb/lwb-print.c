@@ -57,11 +57,14 @@ void print_stats() {
 
     uint8_t i = 0;
 
-    printf("sched : ");
-    for (i = 0; i < GET_N_DATA_SLOTS(CURRENT_SCHEDULE_INFO().ui8_n_slots); i++) {
-        printf("%04X ", CURRENT_SCHEDULE().ui16arr_slots[i]);
+    if (lwb_context.ui8_sync_state == LWB_SYNC_STATE_SYNCED ||
+        lwb_context.ui8_sync_state == LWB_SYNC_STATE_UNSYNCED_1) {
+        printf("sched : ");
+        for (i = 0; i < GET_N_DATA_SLOTS(CURRENT_SCHEDULE_INFO().ui8_n_slots); i++) {
+            printf("%04X ", CURRENT_SCHEDULE().ui16arr_slots[i]);
+        }
+        printf("\n");
     }
-    printf("\n");
 
     if (lwb_context.ui8_lwb_mode == LWB_MODE_HOST) {
         printf("stream stats [added %u, dups : %u, no_space %u]\n",

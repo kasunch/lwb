@@ -401,6 +401,24 @@ inline void glossy_end_tx(void);
 #define INIT_PIN_ADC7_OUT    INIT_PIN_OUT(6,7)
 #define PIN_ADC7_IS_SET      PIN_IS_SET(6,7)
 
+#define SET_PIN_LEDS_RED            UNSET_PIN(5, 4)
+#define UNSET_PIN_LEDS_RED          SET_PIN(5, 4)
+#define TOGGLE_PIN_LEDS_RED         TOGGLE_PIN(5, 4)
+#define INIT_PIN_LEDS_RED_OUT       INIT_PIN_OUT(5, 4)
+#define PIN_LEDS_RED_IS_SET         PIN_IS_SET(5,4)
+
+#define SET_PIN_LEDS_GREEN            UNSET_PIN(5, 5)
+#define UNSET_PIN_LEDS_GREEN          SET_PIN(5, 5)
+#define TOGGLE_PIN_LEDS_GREEN         TOGGLE_PIN(5, 6)
+#define INIT_PIN_LEDS_GREEN_OUT       INIT_PIN_OUT(5, 5)
+#define PIN_LEDS_GREEN_IS_SET         PIN_IS_SET(5, 5)
+
+#define SET_PIN_LEDS_BLUE            UNSET_PIN(5, 6)
+#define UNSET_PIN_LEDS_BLUE          SET_PIN(5, 6)
+#define TOGGLE_PIN_LEDS_BLUE         TOGGLE_PIN(5, 6)
+#define INIT_PIN_LEDS_BLUE_OUT       INIT_PIN_OUT(5, 6)
+#define PIN_LEDS_BLUE_IS_SET         PIN_IS_SET(5, 6)
+
 #endif /* GLOSSY_H_ */
 
 /** @} */

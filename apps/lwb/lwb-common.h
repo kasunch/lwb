@@ -69,7 +69,7 @@ typedef enum {
 } lwb_poll_flags_t;
 
 /// @brief Header to be used when sending data
-typedef struct data_header {
+typedef struct __attribute__ ((__packed__)) data_header {
     uint16_t ui16_from_id;  ///< From node ID
     uint16_t ui16_to_id;    ///< To node ID
     uint8_t  ui8_data_len;  ///< Data options
@@ -78,14 +78,14 @@ typedef struct data_header {
 
 
 /// @brief This header is used when sending stream requests as separate messages.
-typedef struct lwb_stream_req_header {
+typedef struct __attribute__ ((__packed__)) lwb_stream_req_header {
     uint16_t ui16_from_id;      ///< ID of the node that send the packet
     uint8_t ui8_n_reqs;         ///< Number of stream requests
 } lwb_stream_req_header_t;
 
 
 /// @brief Structure for stream requests
-typedef struct lwb_stream_req {
+typedef struct __attribute__ ((__packed__)) lwb_stream_req {
     uint16_t ui16_ipi;           ///< Inter-packet interval in seconds.
     uint16_t ui16_time_info;     ///< Starting time of the stream.
     uint8_t  ui8_req_type;       ///< Request type. Least significant 2 bits represent stream request type.
@@ -94,7 +94,7 @@ typedef struct lwb_stream_req {
 } lwb_stream_req_t;
 
 /// @brief Structure for the header of a schedule
-typedef struct lwb_sched_info {
+typedef struct __attribute__ ((__packed__)) lwb_sched_info {
     uint16_t ui16_host_id;    ///< ID of the host.
     uint16_t ui16_time;       ///< Least significant 16 bits of the current time at the host.
     uint8_t  ui8_n_slots;     ///< Number of slots in the round.

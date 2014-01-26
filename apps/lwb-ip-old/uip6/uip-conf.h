@@ -25,9 +25,9 @@ typedef unsigned short uip_stats_t;
 ///< Logging on or off
 #define UIP_CONF_LOGGING         0
 ///< UDP support on or off
-#define UIP_CONF_UDP             0
+#define UIP_CONF_UDP             1
 ///< TCP support on or off
-#define UIP_CONF_TCP             1
+#define UIP_CONF_TCP             0
 ///< UDP checksums on or off
 #define UIP_CONF_UDP_CHECKSUMS   1
 ///< uIP statistics on or off

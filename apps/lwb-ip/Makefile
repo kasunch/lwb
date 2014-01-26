@@ -1,24 +1,14 @@
-CONTIKI_PROJECT = lwb
+CONTIKI_PROJECT = lwb-ip-test
 all: $(CONTIKI_PROJECT)
 
-ifdef LWB_CONF
-CFLAGS += -D$(LWB_CONF)
-endif
+CFLAGS += -DRF_CHANNEL=26 -DUART1_CONF_TX_WITH_INTERRUPT=0 #-DCOOJA=1
 
-APPDIRS += ./configs
+PROJECTDIRS += ../lwb
+include ../lwb/Makefile.lwb
 
-include ./uip6/Makefile.uip6
-APPDIRS += ./uip6
-
-CFLAGS += -fno-strict-aliasing -ffunction-sections
-
-ifdef ECHO_CLIENT
-CFLAGS += -DECHO_CLIENT=$(ECHO_CLIENT)
-endif
-
-ifdef ECHO_SERVER
-CFLAGS += -DECHO_SERVER=$(ECHO_SERVER)
-endif
+PROJECTDIRS += uip6
+include uip6/Makefile.uip6
+CFLAGS += -fno-strict-aliasing
 
 CONTIKI = ../..
 include $(CONTIKI)/Makefile.include
