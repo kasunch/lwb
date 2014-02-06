@@ -3,8 +3,9 @@
 
 #if TEST_LWB_SCHED_COMPRESSOR
 #include <stdio.h>
-#include <string.h>
 #endif
+
+#include <string.h>
 
 
 #define COMP_BUFFER_LEN 128
