@@ -111,7 +111,9 @@ int rtimer_set(struct rtimer *task, rtimer_clock_t time,
 	       rtimer_clock_t duration, rtimer_callback_t func, void *ptr);
 int rtimer_set_long(struct rtimer *task, rtimer_clock_t ref_time, unsigned long offset,
 	       rtimer_callback_t func, void *ptr);
-unsigned long rtimer_time_to_expire(void);
+
+// The implementation of this function is not platform independent
+//unsigned long rtimer_time_to_expire(void);
 
 /**
  * \brief      Execute the next real-time task and schedule the next task, if any
