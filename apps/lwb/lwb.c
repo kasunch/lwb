@@ -1,7 +1,6 @@
+#include <string.h>
 #include "contiki.h"
-
 #include "glossy.h"
-
 #include "lwb-common.h"
 #include "lwb-macros.h"
 #include "lwb.h"
