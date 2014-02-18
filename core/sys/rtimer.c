@@ -120,11 +120,12 @@ rtimer_set_long(struct rtimer *rtimer, rtimer_clock_t ref_time, unsigned long of
   return RTIMER_OK;
 }
 /*---------------------------------------------------------------------------*/
-unsigned long
-rtimer_time_to_expire(void) {
-	return (unsigned long)(TACCR0 - RTIMER_NOW()) +
-			((unsigned long)next_rtimer->overflows_to_go << 16);
-}
+// This is not platform independent
+//unsigned long
+//rtimer_time_to_expire(void) {
+//	return (unsigned long)(TACCR0 - RTIMER_NOW()) +
+//			((unsigned long)next_rtimer->overflows_to_go << 16);
+//}
 /*---------------------------------------------------------------------------*/
 void
 rtimer_run_next(void)
