@@ -37,7 +37,7 @@
  *         Federico Ferrari <ferrari@tik.ee.ethz.ch>
  */
 
-#include "glossy.h"
+#include "net/glossy.h"
 
 #define CM_POS              CM_1
 #define CM_NEG              CM_2
