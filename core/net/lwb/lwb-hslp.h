@@ -9,7 +9,7 @@
 #include "contiki.h"
 
 #ifdef LWB_CONF_HSLP
-#define LWB_HSLP    1
+#define LWB_HSLP    LWB_CONF_HSLP
 #else
 #define LWB_HSLP    0
 #endif
