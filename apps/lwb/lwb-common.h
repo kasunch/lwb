@@ -11,13 +11,12 @@
 /// @defgroup Configurations
 /// @{
 
-#ifndef LWB_CONF_MAX_TXRX_BUF_LEN
-#define LWB_CONF_MAX_TXRX_BUF_LEN    127
-#endif
 
-#ifndef LWB_CONF_SCHED_MAX_SLOTS
-#define LWB_CONF_SCHED_MAX_SLOTS      20
-#endif
+#define LWB_MAX_TXRX_BUF_LEN    127
+
+
+#define LWB_SCHED_MAX_SLOTS      20
+
 
 /// @}
 
@@ -103,9 +102,9 @@ typedef struct __attribute__ ((__packed__)) lwb_sched_info {
 } lwb_sched_info_t;
 
 /// @brief LWB schedule
-typedef struct lwb_schedule {
+typedef struct __attribute__ ((__packed__)) lwb_schedule {
     lwb_sched_info_t    sched_info;                                 ///< schedule information
-    uint16_t            ui16arr_slots[LWB_CONF_SCHED_MAX_SLOTS];    ///< slots. The node ID will be stored.
+    uint16_t            ui16arr_slots[LWB_SCHED_MAX_SLOTS];    ///< slots. The node ID will be stored.
 } lwb_schedule_t;
 
 /// @brief LWB callbacks
@@ -161,7 +160,7 @@ typedef struct lwb_context {
     lwb_callbacks_t *p_callbacks;            ///< Call back functions.
     uint8_t         ui8_lwb_mode;            ///< Mode of LWB @see lwb_mode_t
     struct rtimer  rt;                      ///< the real-time timer used to start glossy phases
-    uint8_t         ui8arr_txrx_buf[LWB_CONF_MAX_TXRX_BUF_LEN]; ///< TX/RX buffer
+    uint8_t         ui8arr_txrx_buf[LWB_MAX_TXRX_BUF_LEN]; ///< TX/RX buffer
     uint8_t         ui8_txrx_buf_len;        ///< The length of the data in TX/RX buffer
     uint8_t         ui8_poll_flags;          ///< Flags that indicate why LWB main process is polled.
 
@@ -169,7 +168,7 @@ typedef struct lwb_context {
     uint8_t         ui8_sync_state;         ///< Synchronization state
 
     // hosts
-    uint16_t        ui16arr_stream_akcs[LWB_CONF_SCHED_MAX_SLOTS];  ///< IDs of the nodes which stream acks to be sent
+    uint16_t        ui16arr_stream_akcs[LWB_SCHED_MAX_SLOTS];  ///< IDs of the nodes which stream acks to be sent
     uint8_t         ui8_n_stream_acks;                              ///< Number of stream acks
 
     // stats
@@ -185,7 +184,7 @@ typedef struct lwb_context {
 /// @brief Structure for data buffer element.
 typedef struct data_buf {
     data_header_t   header;
-    uint8_t         data[LWB_CONF_MAX_TXRX_BUF_LEN];
+    uint8_t         data[LWB_MAX_TXRX_BUF_LEN];
 } data_buf_t;
 
 /// @brief Structure for data buffer element.
@@ -253,7 +252,12 @@ typedef struct stream_req_lst_item {
 /// @brief Glossy duration for synchronization (sending/receiving schedule) (30 ms)
 #define T_SYNC_ON                   (RTIMER_SECOND / 33)            // 30 ms
 /// @brief Gap between slots (4 ms).
-#define T_GAP                       (RTIMER_SECOND / 250)           // 04 ms
+#define T_GAP                       (RTIMER_SECOND / 100)           // 10 ms
+/// @brief Time duration to exchange application data packets between external device 
+#define T_HSLP_APP_DATA             (RTIMER_SECOND / 125)           // 08 ms 
+/// @brief Time duration to get new schedule from the external device
+#define T_HSLP_SCHED                (RTIMER_SECOND / 50)            // 20 ms
+
 /// @brief Glossy duration for data slots (20 ms)
 #if COOJA
 #define T_RR_ON                     (RTIMER_SECOND / 25)            // 40 ms
@@ -278,18 +282,7 @@ typedef struct stream_req_lst_item {
 #define T_GUARD                     (RTIMER_SECOND / 2000)          // 500 us
 #endif
 
-/// @brief Only one schedule is used by default
-#ifndef TWO_SCHEDS
-#define TWO_SCHEDS                  0
-#endif
-
-#ifndef TIME_SCALE
-#define TIME_SCALE                  1
-#endif
 
 /// @}
-
-//#define PERIOD_RT(T)     ((T) * (uint32_t)RTIMER_SECOND + ((int32_t)((T) * skew) / (int32_t)64))
-
 
 #endif // __LWB_COMMON_H__

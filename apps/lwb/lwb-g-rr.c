@@ -16,6 +16,7 @@
 #include "lwb-scheduler.h"
 #include "lwb-sched-compressor.h"
 
+#include "lwb-hslp.h"
 #include "lwb-print.h"
 
 
@@ -58,14 +59,18 @@ MEMB(mmb_stream_req, stream_req_lst_item_t, LWB_CONF_MAX_STREAM_REQ_ELEMENTS);
 /// @brief List for stream requests to be sent
 LIST(lst_stream_req);
 /// @brief Number of stream requests to be sent
-static uint8_t ui8_stream_reqs_lst_size = 0;
+static volatile uint8_t ui8_stream_reqs_lst_size = 0;
 /// @brief The ID of the next stream request
-static uint8_t ui8_stream_id_next = 1;
+static volatile uint8_t ui8_stream_id_next = 1;
 
-static uint8_t ui8_n_rounds_to_wait = 0;
+static volatile uint8_t ui8_n_rounds_to_wait = 0;
 
-static uint8_t ui8_n_trials = 0;
+static volatile uint8_t ui8_n_trials = 0;
 
+#if LWB_HSLP
+static volatile uint8_t ui8_hslp_pkt_type = 0;
+static volatile rtimer_clock_t t_hslp_stop = 0;
+#endif // LWB_HSLP
 
 //--------------------------------------------------------------------------------------------------
 void lwb_g_rr_init() {
@@ -80,6 +85,10 @@ void lwb_g_rr_init() {
     memb_init(&mmb_stream_req);
     list_init(lst_stream_req);
     ui8_stream_reqs_lst_size = 0;
+
+#if LWB_HSLP
+    lwb_hslp_init();
+#endif // LWB_HSLP
 }
 
 
@@ -91,7 +100,7 @@ static void prepare_data_packet() {
     stream_req_lst_item_t* p_req_item;
     uint8_t ui8_c;
 
-    if (p_buf_item && (LWB_CONF_MAX_TXRX_BUF_LEN > p_buf_item->buf.header.ui8_data_len + sizeof(data_header_t))) {
+    if (p_buf_item && (LWB_MAX_TXRX_BUF_LEN > p_buf_item->buf.header.ui8_data_len + sizeof(data_header_t))) {
         // We have enough space on the buffer to send data. This is just a sanity check.
 
         // First, we copy the data. The data header will be copied later at the end.
@@ -104,7 +113,7 @@ static void prepare_data_packet() {
 
         if (lwb_context.ui8_lwb_mode == LWB_MODE_SOURCE && ui8_stream_reqs_lst_size > 0) {
             // We have some stream requests pending to be sent. Let's try to include them in the data packet
-            ui8_n_possible = (LWB_CONF_MAX_TXRX_BUF_LEN - lwb_context.ui8_txrx_buf_len) / sizeof(lwb_stream_req_t);
+            ui8_n_possible = (LWB_MAX_TXRX_BUF_LEN - lwb_context.ui8_txrx_buf_len) / sizeof(lwb_stream_req_t);
 
             // Iterate through all stream requests and try to include them into one packet.
             // Here, we do not remove any of the stream requests from the list as they may need to be resent
@@ -213,7 +222,7 @@ static void process_stream_reqs() {
         }
     }
 
-    if (lwb_context.ui8_n_stream_acks >= LWB_CONF_SCHED_MAX_SLOTS) {
+    if (lwb_context.ui8_n_stream_acks >= LWB_SCHED_MAX_SLOTS) {
         // Maximum space for stream acks exceeded.
         // We just ignore the stream requests.
         return;
@@ -235,7 +244,7 @@ static void process_stream_reqs() {
 //--------------------------------------------------------------------------------------------------
 static void prepare_stream_reqs() {
 
-    uint8_t ui8_n_possible = (LWB_CONF_MAX_TXRX_BUF_LEN - sizeof(lwb_stream_req_header_t)) / sizeof(lwb_stream_req_t);
+    uint8_t ui8_n_possible = (LWB_MAX_TXRX_BUF_LEN - sizeof(lwb_stream_req_header_t)) / sizeof(lwb_stream_req_t);
     lwb_stream_req_header_t header;
     stream_req_lst_item_t* p_req_item;
     uint8_t ui8_c;
@@ -325,6 +334,149 @@ static void process_data_packet() {
     }
 }
 
+#if LWB_HSLP
+//--------------------------------------------------------------------------------------------------
+inline uint8_t lwb_g_rr_hslp_queue_app_data(uint8_t* p_data, uint8_t ui8_len) {
+
+    // Just a sanity check
+    if (ui8_len < sizeof(data_header_t)) {
+        return 0;
+    }
+
+    data_buf_lst_item_t* p_item = memb_alloc(&mmb_data_buf);
+
+    if (p_item && (LWB_MAX_TXRX_BUF_LEN > ui8_len)) {
+
+        memcpy(&p_item->buf.header, p_data, sizeof(data_header_t));
+
+        p_item->buf.header.ui16_from_id = node_id; // always replace from ID
+        p_item->buf.header.ui8_options = 0; // No options are used
+        memcpy(p_item->buf.data, p_data + sizeof(data_header_t), p_item->buf.header.ui8_data_len);
+        list_add(lst_tx_buf_queue, p_item);
+        ui8_tx_buf_q_size++;
+        return 1;
+    }
+
+    LWB_STATS_DATA(ui16_n_tx_nospace)++;
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------------------
+inline uint8_t lwb_g_rr_hslp_copy_schedule(uint8_t* p_data, uint8_t ui8_len) {
+
+    // Just a sanity check
+    if (ui8_len < sizeof(lwb_sched_info_t)) {
+        return 0;
+    }
+
+    // First copy the schedule information
+    memcpy(&CURRENT_SCHEDULE_INFO(), p_data, sizeof(lwb_sched_info_t));
+
+    uint8_t ui8_data_slots =  GET_N_DATA_SLOTS(CURRENT_SCHEDULE_INFO().ui8_n_slots);
+
+    // Validate the size of the received schedule
+    if (ui8_len != (sizeof(lwb_sched_info_t) + (2 * ui8_data_slots))) {
+        return 0;
+    }
+
+    // Just a validation check to avoid buffer overflows
+    if (ui8_data_slots > LWB_SCHED_MAX_SLOTS) {
+        return 0;
+    }
+
+    // Everything seem to be fine. So we copy the schedule slots
+    memcpy(CURRENT_SCHEDULE().ui16arr_slots, p_data + sizeof(lwb_sched_info_t), ui8_data_slots * 2);
+
+    return 1;
+}
+
+//--------------------------------------------------------------------------------------------------
+inline void lwb_g_rr_hslp_send_receive_app_data() {
+
+    // Calculate the time when HSLP operation should be finished
+    t_hslp_stop = RTIMER_NOW() + T_HSLP_APP_DATA;
+    // We dump received data to the external device
+    LWB_HSLP_SET_PKT_MAIN_TYPE(LHSLP_PKT_TYPE_LWB_DATA, ui8_hslp_pkt_type);
+    LWB_HSLP_SET_PKT_SUB_TYPE(LHSLP_PKT_SUB_TYPE_APP_DATA, ui8_hslp_pkt_type);
+    lwb_hslp_send(ui8_hslp_pkt_type, lwb_context.ui8arr_txrx_buf, lwb_context.ui8_txrx_buf_len);
+
+    // Send a request to get application data from the external device
+    LWB_HSLP_SET_PKT_MAIN_TYPE(LHSLP_PKT_TYPE_LWB_DATA_REQ, ui8_hslp_pkt_type);
+    LWB_HSLP_SET_PKT_SUB_TYPE(LHSLP_PKT_SUB_TYPE_APP_DATA, ui8_hslp_pkt_type);
+    lwb_hslp_send(ui8_hslp_pkt_type, lwb_context.ui8arr_txrx_buf, 0);
+
+    // Read a packet from external device if available
+    if (lwb_hslp_read(t_hslp_stop)) {
+
+        ui8_hslp_pkt_type = lwb_hslp_get_packet_type();
+
+        if ((LWB_HSLP_GET_PKT_MAIN_TYPE(ui8_hslp_pkt_type) == LHSLP_PKT_TYPE_LWB_DATA) &&
+            (LWB_HSLP_GET_PKT_SUB_TYPE(ui8_hslp_pkt_type) == LHSLP_PKT_SUB_TYPE_APP_DATA)) {
+            // We have an application data packet from external device
+            lwb_g_rr_hslp_queue_app_data(lwb_hslp_get_data(), lwb_hslp_get_data_len());
+
+        } else {
+          // Some other HSLP packet
+        }
+    } else {
+        // No data read or timeout
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+inline void lwb_g_rr_hslp_send_receive_schedule() {
+
+    // Calculate the time when HSLP operation should be finished
+    t_hslp_stop = RTIMER_NOW() + T_HSLP_SCHED;
+    // We send this to the external device
+    LWB_HSLP_SET_PKT_MAIN_TYPE(LHSLP_PKT_TYPE_LWB_DATA, ui8_hslp_pkt_type);
+    LWB_HSLP_SET_PKT_SUB_TYPE(LHSLP_PKT_SUB_TYPE_SCHED, ui8_hslp_pkt_type);
+    lwb_hslp_send(ui8_hslp_pkt_type, (uint8_t*)&CURRENT_SCHEDULE(),
+                                     sizeof(lwb_sched_info_t) + (N_CURRENT_DATA_SLOTS() * 2));
+    // Send a request for the new schedule
+    LWB_HSLP_SET_PKT_MAIN_TYPE(LHSLP_PKT_TYPE_LWB_DATA_REQ, ui8_hslp_pkt_type);
+    LWB_HSLP_SET_PKT_SUB_TYPE(LHSLP_PKT_SUB_TYPE_SCHED, ui8_hslp_pkt_type);
+    lwb_hslp_send(ui8_hslp_pkt_type, (uint8_t*)&CURRENT_SCHEDULE_INFO(), 0);
+
+    // Read a packet from external device if available
+    if (lwb_hslp_read(t_hslp_stop)) {
+        // We have read HSLP packet successfully
+        ui8_hslp_pkt_type = lwb_hslp_get_packet_type();
+
+        if ((LWB_HSLP_GET_PKT_MAIN_TYPE(ui8_hslp_pkt_type) == LHSLP_PKT_TYPE_LWB_DATA) &&
+            (LWB_HSLP_GET_PKT_SUB_TYPE(ui8_hslp_pkt_type) == LHSLP_PKT_SUB_TYPE_SCHED)) {
+            // We have a schedule packet from external device.
+            if (!lwb_g_rr_hslp_copy_schedule(lwb_hslp_get_data(), lwb_hslp_get_data_len())) {
+                // Oops..! error in copying the schedule. So we compute the schedule locally.
+                lwb_sched_compute_schedule(&CURRENT_SCHEDULE());
+            } else {
+                // We successfully received the schedule from external device.
+                // So do nothing in here.
+            }
+
+        } else {
+            // Some other HSLP packet. So we compute the schedule locally.
+            lwb_sched_compute_schedule(&CURRENT_SCHEDULE());
+        }
+    } else {
+        ///< @todo Add stats about schedule timeouts
+        // No data read or timeout. So we compute the schedule locally.
+        lwb_sched_compute_schedule(&CURRENT_SCHEDULE());
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+inline void lwb_g_rr_hslp_send_stream_reqs() {
+    // HSLP is enabled. We dump received stream requests over the serial
+    LWB_HSLP_SET_PKT_MAIN_TYPE(LHSLP_PKT_TYPE_LWB_DATA, ui8_hslp_pkt_type);
+    LWB_HSLP_SET_PKT_SUB_TYPE(LHSLP_PKT_SUB_TYPE_STREAM_REQ, ui8_hslp_pkt_type);
+    lwb_hslp_send(ui8_hslp_pkt_type, lwb_context.ui8arr_txrx_buf, lwb_context.ui8_txrx_buf_len);
+}
+
+#endif // LWB_HSLP
+
+
 //--------------------------------------------------------------------------------------------------
 PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
     PT_BEGIN(&pt_lwb_g_rr);
@@ -360,6 +512,28 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
 
             } else if (CURRENT_SCHEDULE().ui16arr_slots[ui8_slot_idx] == node_id)  {
                 // This is my slot (allocated for the host)
+
+                if (ui8_tx_buf_q_size != 0) {
+                    // We have something to send
+                    prepare_data_packet();
+                    glossy_start(lwb_context.ui8arr_txrx_buf,
+                                 lwb_context.ui8_txrx_buf_len,
+                                 GLOSSY_INITIATOR,
+                                 GLOSSY_NO_SYNC,
+                                 N_RR,
+                                 LWB_PKT_TYPE_DATA,
+                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                                 (rtimer_callback_t)lwb_g_rr_source,
+                                 &lwb_context.rt,
+                                 &lwb_context);
+
+                    PT_YIELD(&pt_lwb_g_rr);
+                    glossy_stop();
+
+                } else {
+                    // Ohh...we have nothing to send even though this is our slot. We just stay silent.
+                }
+
             } else {
                 // The slot belongs to some other node
                 glossy_start(lwb_context.ui8arr_txrx_buf,
@@ -380,17 +554,24 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
                     ui8_g_header = get_header();
                     lwb_context.ui8_txrx_buf_len = get_data_len();
 
+
                     if (ui8_g_header == LWB_PKT_TYPE_DATA) {
                         // Data packet
+#if LWB_HSLP
+                        lwb_g_rr_hslp_send_receive_app_data();
+#else
                         process_data_packet();
+#endif // LWB_HSLP
+
                     } else {
                         // Unknown packets
                         /// @todo add stats about unknown packets.
                     }
 
+
                 } else {
                     // we haven't received Glossy flooding.
-                    /// @todo Add stats about not received Glossy floodings.
+                    /// @todo Add stats about not received Glossy flooding.
                 }
             }
         }
@@ -412,7 +593,7 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
                          GLOSSY_NO_SYNC,
                          N_RR,
                          0,
-                         lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_FREE_ON,
+                         lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
                          (rtimer_callback_t)lwb_g_rr_host,
                          &lwb_context.rt,
                          &lwb_context);
@@ -426,6 +607,11 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
 
                 if (ui8_g_header == LWB_PKT_TYPE_STREAM_REQ) {
                     // Stream requests
+#if LWB_HSLP
+                    lwb_g_rr_hslp_send_stream_reqs();
+#endif
+                    // We feed stream request information regardless of external device is used to
+                    // compute schedule
                     process_stream_reqs();
                 } else {
                     // Unknown packets
@@ -434,24 +620,35 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
 
             } else {
                 // we haven't received Glossy flooding.
-                /// @todo Add stats about not received Glossy floodings.
+                /// @todo Add stats about not received Glossy flooding.
             }
 
         }
 
-
         // Copy current schedule to old schedule
         memcpy(&OLD_SCHEDULE(), &CURRENT_SCHEDULE(), sizeof(lwb_schedule_t));
 
+#if LWB_HSLP
+        lwb_g_rr_hslp_send_receive_schedule();
+#else
         // Compute new schedule
         lwb_sched_compute_schedule(&CURRENT_SCHEDULE());
+#endif // LWB_HSLP
 
-        /// @todo Compress and copy the schedule to buffer
+
+        // We ignore what scheduler tells about host id and time
+        CURRENT_SCHEDULE_INFO().ui16_host_id = node_id;
+        CURRENT_SCHEDULE_INFO().ui16_time = UI32_GET_LOW(lwb_context.ui32_time);
+
+        // Schedule computation/reception is done. So, increase the time by one second
+        lwb_context.ui32_time++;
+
+        // Compress and copy the schedule to buffer
         memcpy(lwb_context.ui8arr_txrx_buf, &CURRENT_SCHEDULE_INFO(), sizeof(lwb_sched_info_t));
         lwb_context.ui8_txrx_buf_len = sizeof(lwb_sched_info_t);
         lwb_context.ui8_txrx_buf_len += lwb_sched_compress(&CURRENT_SCHEDULE(),
                                                            lwb_context.ui8arr_txrx_buf + lwb_context.ui8_txrx_buf_len,
-                                                           LWB_CONF_MAX_TXRX_BUF_LEN - lwb_context.ui8_txrx_buf_len);
+                                                           LWB_MAX_TXRX_BUF_LEN - lwb_context.ui8_txrx_buf_len);
 
         LWB_SET_POLL_FLAG(LWB_POLL_FLAGS_SCHED_END);
         process_poll(&lwb_main_process);
@@ -558,7 +755,7 @@ PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
 
                 } else {
                     // we haven't received Glossy flooding.
-                    /// @todo Add stats about not received Glossy floodings.
+                    /// @todo Add stats about not received Glossy flooding.
                 }
             }
 
@@ -584,7 +781,7 @@ PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
                                  GLOSSY_NO_SYNC,
                                  N_RR,
                                  LWB_PKT_TYPE_STREAM_REQ,
-                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_FREE_ON,
+                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
                                  (rtimer_callback_t)lwb_g_rr_source,
                                  &lwb_context.rt,
                                  &lwb_context);
@@ -603,7 +800,7 @@ PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
                                  GLOSSY_NO_SYNC,
                                  N_RR,
                                  0,
-                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_FREE_ON,
+                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
                                  (rtimer_callback_t)lwb_g_rr_source,
                                  &lwb_context.rt,
                                  &lwb_context);
@@ -621,7 +818,7 @@ PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
                              GLOSSY_NO_SYNC,
                              N_RR,
                              0,
-                             lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_FREE_ON,
+                             lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
                              (rtimer_callback_t)lwb_g_rr_source,
                              &lwb_context.rt,
                              &lwb_context);
@@ -670,7 +867,7 @@ uint8_t lwb_g_rr_queue_packet(uint8_t* p_data, uint8_t ui8_len, uint16_t ui16_to
 
     data_buf_lst_item_t* p_item = memb_alloc(&mmb_data_buf);
 
-    if (p_item && (LWB_CONF_MAX_TXRX_BUF_LEN > ui8_len + sizeof(data_header_t))) {
+    if (p_item && (LWB_MAX_TXRX_BUF_LEN > ui8_len + sizeof(data_header_t))) {
 
         p_item->buf.header.ui16_from_id = node_id;
         p_item->buf.header.ui16_to_id = ui16_to_node_id;
