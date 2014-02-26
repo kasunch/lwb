@@ -57,7 +57,7 @@ static void inline add_stream(uint16_t ui16_node_id, lwb_stream_req_t *p_req) {
 
                 LWB_STATS_SCHED(ui16_n_duplicates)++;
 
-                if (lwb_context.ui8_n_stream_acks >= LWB_CONF_SCHED_MAX_SLOTS) {
+                if (lwb_context.ui8_n_stream_acks >= LWB_SCHED_MAX_SLOTS) {
                     // Maximum space for stream acks exceeded.
                     // We just ignore the stream request.
                     return;
@@ -137,7 +137,7 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
 
 
     for (prev_stream = list_head(streams_list);
-         prev_stream != NULL && ui8_n_slots_assigned < LWB_CONF_SCHED_MAX_SLOTS;
+         prev_stream != NULL && ui8_n_slots_assigned < LWB_SCHED_MAX_SLOTS;
          prev_stream = prev_stream->next) {
         p_sched->ui16arr_slots[ui8_n_slots_assigned++] = prev_stream->ui16_node_id;
     }
@@ -146,8 +146,6 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
     p_sched->sched_info.ui8_T = 1;
     SET_N_FREE_SLOTS(p_sched->sched_info.ui8_n_slots, 2);
     SET_N_DATA_SLOTS(p_sched->sched_info.ui8_n_slots, ui8_n_slots_assigned);
-
-    lwb_context.ui32_time += 1;
 }
 
 //--------------------------------------------------------------------------------------------------

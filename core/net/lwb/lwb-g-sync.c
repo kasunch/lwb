@@ -32,7 +32,7 @@ PT_THREAD(lwb_g_sync_host(struct rtimer *t, lwb_context_t *p_context)) {
     lwb_context.ui8_txrx_buf_len = sizeof(lwb_sched_info_t);
     lwb_context.ui8_txrx_buf_len += lwb_sched_compress(&CURRENT_SCHEDULE(),
                                                        lwb_context.ui8arr_txrx_buf + lwb_context.ui8_txrx_buf_len,
-                                                       LWB_CONF_MAX_TXRX_BUF_LEN - lwb_context.ui8_txrx_buf_len);
+                                                       LWB_MAX_TXRX_BUF_LEN - lwb_context.ui8_txrx_buf_len);
 
     // Assume the reference time is estimated 1 second ago.
     lwb_context.ui16_t_sync_ref = RTIMER_TIME(t) - RTIMER_SECOND;
