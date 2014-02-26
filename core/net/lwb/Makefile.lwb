@@ -1,2 +1,2 @@
-PROJECT_SOURCEFILES += lwb.c lwb-g-sync.c lwb-g-rr.c lwb-scheduler.c lwb-sched-compressor.c lwb-print.c lwb-hslp.c
+CONTIKI_SOURCEFILES += lwb.c lwb-g-sync.c lwb-g-rr.c lwb-scheduler.c lwb-sched-compressor.c lwb-print.c lwb-hslp.c
 
