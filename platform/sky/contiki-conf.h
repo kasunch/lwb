@@ -4,6 +4,11 @@
 #ifndef CONTIKI_CONF_H
 #define CONTIKI_CONF_H
 
+#ifndef RF_CHANNEL
+#define RF_CHANNEL 26
+#endif
+
+
 #if TINYOS
 #define TINYOS_SERIAL_FRAMES 1
 #endif
