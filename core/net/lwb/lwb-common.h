@@ -252,11 +252,11 @@ typedef struct stream_req_lst_item {
 /// @brief Glossy duration for synchronization (sending/receiving schedule) (30 ms)
 #define T_SYNC_ON                   (RTIMER_SECOND / 33)            // 30 ms
 /// @brief Gap between slots (4 ms).
-#define T_GAP                       (RTIMER_SECOND / 100)           // 10 ms
+#define T_GAP                       (RTIMER_SECOND / 33)           // 30 ms
 /// @brief Time duration to exchange application data packets between external device 
-#define T_HSLP_APP_DATA             (RTIMER_SECOND / 125)           // 08 ms 
+#define T_HSLP_APP_DATA             (RTIMER_SECOND / 33)           // 30 ms
 /// @brief Time duration to get new schedule from the external device
-#define T_HSLP_SCHED                (RTIMER_SECOND / 50)            // 20 ms
+#define T_HSLP_SCHED                (RTIMER_SECOND / 25)            // 40 ms
 
 /// @brief Glossy duration for data slots (20 ms)
 #if COOJA
