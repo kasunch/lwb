@@ -526,7 +526,7 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
                                  N_RR,
                                  LWB_PKT_TYPE_DATA,
                                  lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
-                                 (rtimer_callback_t)lwb_g_rr_source,
+                                 (rtimer_callback_t)lwb_g_rr_host,
                                  &lwb_context.rt,
                                  &lwb_context);
 
