@@ -392,15 +392,18 @@ inline uint8_t lwb_g_rr_hslp_copy_schedule(uint8_t* p_data, uint8_t ui8_len) {
 }
 
 //--------------------------------------------------------------------------------------------------
-inline void lwb_g_rr_hslp_send_receive_app_data() {
-
-    // Calculate the time when HSLP operation should be finished
-    t_hslp_stop = RTIMER_NOW() + T_HSLP_APP_DATA;
+inline void lwb_g_rr_hslp_send_app_data() {
     // We dump received data to the external device
     LWB_HSLP_SET_PKT_MAIN_TYPE(LHSLP_PKT_TYPE_LWB_DATA, ui8_hslp_pkt_type);
     LWB_HSLP_SET_PKT_SUB_TYPE(LHSLP_PKT_SUB_TYPE_APP_DATA, ui8_hslp_pkt_type);
     lwb_hslp_send(ui8_hslp_pkt_type, lwb_context.ui8arr_txrx_buf, lwb_context.ui8_txrx_buf_len);
+}
 
+//--------------------------------------------------------------------------------------------------
+inline void lwb_g_rr_hslp_receive_app_data() {
+
+    // Calculate the time when HSLP operation should be finished
+    t_hslp_stop = RTIMER_NOW() + T_HSLP_APP_DATA;
     // Send a request to get application data from the external device
     LWB_HSLP_SET_PKT_MAIN_TYPE(LHSLP_PKT_TYPE_LWB_DATA_REQ, ui8_hslp_pkt_type);
     LWB_HSLP_SET_PKT_SUB_TYPE(LHSLP_PKT_SUB_TYPE_APP_DATA, ui8_hslp_pkt_type);
@@ -554,11 +557,10 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
                     ui8_g_header = get_header();
                     lwb_context.ui8_txrx_buf_len = get_data_len();
 
-
                     if (ui8_g_header == LWB_PKT_TYPE_DATA) {
                         // Data packet
 #if LWB_HSLP
-                        lwb_g_rr_hslp_send_receive_app_data();
+                        lwb_g_rr_hslp_send_app_data();
 #else
                         process_data_packet();
 #endif // LWB_HSLP
@@ -573,6 +575,11 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
                     // we haven't received Glossy flooding.
                     /// @todo Add stats about not received Glossy flooding.
                 }
+
+#if LWB_HSLP
+                lwb_g_rr_hslp_receive_app_data();
+#endif // LWB_HSLP
+
             }
         }
 
