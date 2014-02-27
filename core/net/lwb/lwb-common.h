@@ -12,7 +12,7 @@
 /// @{
 
 
-#define LWB_MAX_TXRX_BUF_LEN    127
+#define LWB_MAX_TXRX_BUF_LEN    126
 
 
 #define LWB_SCHED_MAX_SLOTS      20
@@ -251,8 +251,8 @@ typedef struct stream_req_lst_item {
 #define N_RR                        3
 /// @brief Glossy duration for synchronization (sending/receiving schedule) (30 ms)
 #define T_SYNC_ON                   (RTIMER_SECOND / 33)            // 30 ms
-/// @brief Gap between slots (4 ms).
-#define T_GAP                       (RTIMER_SECOND / 33)           // 30 ms
+/// @brief Gap between slots.
+#define T_GAP                       (RTIMER_SECOND / 25)           // 40 ms
 /// @brief Time duration to exchange application data packets between external device 
 #define T_HSLP_APP_DATA             (RTIMER_SECOND / 33)           // 30 ms
 /// @brief Time duration to get new schedule from the external device
