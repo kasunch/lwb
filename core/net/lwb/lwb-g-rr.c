@@ -210,7 +210,8 @@ static void process_stream_reqs() {
 
     memcpy(&header, lwb_context.ui8arr_txrx_buf, sizeof(lwb_stream_req_header_t));
 
-    if (lwb_context.ui8_txrx_buf_len < sizeof(lwb_stream_req_header_t) + header.ui8_n_reqs * sizeof(lwb_stream_req_t)) {
+    if (lwb_context.ui8_txrx_buf_len < (sizeof(lwb_stream_req_header_t) +
+                                        (header.ui8_n_reqs * sizeof(lwb_stream_req_t)))) {
         return;
     }
 
@@ -345,7 +346,11 @@ inline uint8_t lwb_g_rr_hslp_queue_app_data(uint8_t* p_data, uint8_t ui8_len) {
 
     data_buf_lst_item_t* p_item = memb_alloc(&mmb_data_buf);
 
-    if (p_item && (LWB_MAX_TXRX_BUF_LEN > ui8_len)) {
+    if(!p_item) {
+        return 0;
+    }
+
+    if (LWB_MAX_TXRX_BUF_LEN > ui8_len) {
 
         memcpy(&p_item->buf.header, p_data, sizeof(data_header_t));
 
@@ -355,6 +360,8 @@ inline uint8_t lwb_g_rr_hslp_queue_app_data(uint8_t* p_data, uint8_t ui8_len) {
         list_add(lst_tx_buf_queue, p_item);
         ui8_tx_buf_q_size++;
         return 1;
+    } else {
+    	memb_free(&mmb_data_buf, p_item);
     }
 
     LWB_STATS_DATA(ui16_n_tx_nospace)++;
@@ -874,7 +881,11 @@ uint8_t lwb_g_rr_queue_packet(uint8_t* p_data, uint8_t ui8_len, uint16_t ui16_to
 
     data_buf_lst_item_t* p_item = memb_alloc(&mmb_data_buf);
 
-    if (p_item && (LWB_MAX_TXRX_BUF_LEN > ui8_len + sizeof(data_header_t))) {
+    if(!p_item) {
+        return 0;
+    }
+
+    if (LWB_MAX_TXRX_BUF_LEN > ui8_len + sizeof(data_header_t)) {
 
         p_item->buf.header.ui16_from_id = node_id;
         p_item->buf.header.ui16_to_id = ui16_to_node_id;
@@ -884,6 +895,8 @@ uint8_t lwb_g_rr_queue_packet(uint8_t* p_data, uint8_t ui8_len, uint16_t ui16_to
         list_add(lst_tx_buf_queue, p_item);
         ui8_tx_buf_q_size++;
         return 1;
+    } else {
+        memb_free(&mmb_data_buf, p_item);
     }
 
     LWB_STATS_DATA(ui16_n_tx_nospace)++;
