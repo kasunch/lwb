@@ -109,10 +109,10 @@ enum {
 /* Called on IP packet output. */
 #if UIP_CONF_IPV6
 
-static uint8_t (* outputfunc)(uip_lladdr_t *a);
+static uint8_t (* outputfunc)(const uip_lladdr_t *a);
 
 uint8_t
-tcpip_output(uip_lladdr_t *a)
+tcpip_output(const uip_lladdr_t *a)
 {
   int ret;
   if(outputfunc != NULL) {
@@ -124,11 +124,11 @@ tcpip_output(uip_lladdr_t *a)
 }
 
 void
-tcpip_set_outputfunc(uint8_t (*f)(uip_lladdr_t *))
+tcpip_set_outputfunc(uint8_t (*f)(const uip_lladdr_t *))
 {
   outputfunc = f;
 }
-#else // UIP_CONF_IPV6
+#else
 
 static uint8_t (* outputfunc)(void);
 uint8_t
@@ -146,7 +146,7 @@ tcpip_set_outputfunc(uint8_t (*f)(void))
 {
   outputfunc = f;
 }
-#endif // UIP_CONF_IPV6
+#endif
 
 #if UIP_CONF_IP_FORWARD
 unsigned char tcpip_is_forwarding; /* Forwarding right now? */
@@ -173,7 +173,8 @@ check_for_tcp_syn(void)
      this timer.  This function is called for every incoming IP packet
      to check for such SYNs. */
 #define TCP_SYN 0x02
-  if(UIP_IP_BUF->proto == UIP_PROTO_TCP && (UIP_TCP_BUF->flags & TCP_SYN) == TCP_SYN) {
+  if(UIP_IP_BUF->proto == UIP_PROTO_TCP &&
+     (UIP_TCP_BUF->flags & TCP_SYN) == TCP_SYN) {
     start_periodic_tcp_timer();
   }
 #endif /* UIP_TCP || UIP_CONF_IP_FORWARD */
@@ -334,14 +335,14 @@ udp_broadcast_new(uint16_t port, void *appstate)
   uip_create_linklocal_allnodes_mcast(&addr);
 #else
   uip_ipaddr(&addr, 255,255,255,255);
-#endif // UIP_CONF_IPV6
+#endif /* UIP_CONF_IPV6 */
   conn = udp_new(&addr, port, appstate);
   if(conn != NULL) {
     udp_bind(conn, port);
   }
   return conn;
 }
-#endif // UIP_UDP
+#endif /* UIP_UDP */
 /*---------------------------------------------------------------------------*/
 #if UIP_CONF_ICMP6
 uint8_t
@@ -364,7 +365,7 @@ tcpip_icmp6_call(uint8_t type)
   }
   return;
 }
-#endif // UIP_CONF_ICMP6
+#endif /* UIP_CONF_ICMP6 */
 /*---------------------------------------------------------------------------*/
 static void
 eventhandler(process_event_t ev, process_data_t data)
@@ -372,7 +373,7 @@ eventhandler(process_event_t ev, process_data_t data)
 #if UIP_TCP
   static unsigned char i;
   register struct listenport *l;
-#endif // UIP_TCP
+#endif /*UIP_TCP*/
   struct process *p;
 
   switch(ev) {
@@ -420,41 +421,47 @@ eventhandler(process_event_t ev, process_data_t data)
       break;
 
     case PROCESS_EVENT_TIMER:
-      // We get this event if one of our timers have expired.
+      /* We get this event if one of our timers have expired. */
       {
-        // Check the clock so see if we should call the periodic uIP processing.
-        if(data == &periodic && etimer_expired(&periodic)) {
+        /* Check the clock so see if we should call the periodic uIP
+           processing. */
+        if(data == &periodic &&
+           etimer_expired(&periodic)) {
 #if UIP_TCP
           for(i = 0; i < UIP_CONNS; ++i) {
             if(uip_conn_active(i)) {
-              // Only restart the timer if there are active connections.
+              /* Only restart the timer if there are active
+                 connections. */
               etimer_restart(&periodic);
               uip_periodic(i);
 #if UIP_CONF_IPV6
               tcpip_ipv6_output();
 #else
               if(uip_len > 0) {
-                PRINTF("tcpip_output from periodic len %d\n", uip_len);
+		PRINTF("tcpip_output from periodic len %d\n", uip_len);
                 tcpip_output();
-                PRINTF("tcpip_output after periodic len %d\n", uip_len);
+		PRINTF("tcpip_output after periodic len %d\n", uip_len);
               }
-#endif // UIP_CONF_IPV6
+#endif /* UIP_CONF_IPV6 */
             }
           }
-#endif // UIP_TCP
+#endif /* UIP_TCP */
 #if UIP_CONF_IP_FORWARD
           uip_fw_periodic();
-#endif // UIP_CONF_IP_FORWARD
+#endif /* UIP_CONF_IP_FORWARD */
         }
         
 #if UIP_CONF_IPV6
 #if UIP_CONF_IPV6_REASSEMBLY
-         // check the timer for reassembly
-        if(data == &uip_reass_timer && etimer_expired(&uip_reass_timer)) {
+        /*
+         * check the timer for reassembly
+         */
+        if(data == &uip_reass_timer &&
+           etimer_expired(&uip_reass_timer)) {
           uip_reass_over();
           tcpip_ipv6_output();
         }
-#endif // UIP_CONF_IPV6_REASSEMBLY
+#endif /* UIP_CONF_IPV6_REASSEMBLY */
         /*
          * check the different timers for neighbor discovery and
          * stateless autoconfiguration
@@ -486,17 +493,17 @@ eventhandler(process_event_t ev, process_data_t data)
         uip_poll_conn(data);
 #if UIP_CONF_IPV6
         tcpip_ipv6_output();
-#else // UIP_CONF_IPV6
+#else /* UIP_CONF_IPV6 */
         if(uip_len > 0) {
-          PRINTF("tcpip_output from tcp poll len %d\n", uip_len);
+	  PRINTF("tcpip_output from tcp poll len %d\n", uip_len);
           tcpip_output();
         }
-#endif // UIP_CONF_IPV6
-        // Start the periodic polling, if it isn't already active.
+#endif /* UIP_CONF_IPV6 */
+        /* Start the periodic polling, if it isn't already active. */
         start_periodic_tcp_timer();
       }
       break;
-#endif // UIP_TCP
+#endif /* UIP_TCP */
 #if UIP_UDP
     case UDP_POLL:
       if(data != NULL) {
@@ -507,10 +514,10 @@ eventhandler(process_event_t ev, process_data_t data)
         if(uip_len > 0) {
           tcpip_output();
         }
-#endif // UIP_UDP
+#endif /* UIP_UDP */
       }
       break;
-#endif // UIP_UDP
+#endif /* UIP_UDP */
 
     case PACKET_INPUT:
       packet_input();
@@ -525,15 +532,15 @@ tcpip_input(void)
   uip_len = 0;
 #if UIP_CONF_IPV6
   uip_ext_len = 0;
-#endif // UIP_CONF_IPV6
+#endif /*UIP_CONF_IPV6*/
 }
 /*---------------------------------------------------------------------------*/
 #if UIP_CONF_IPV6
 void
 tcpip_ipv6_output(void)
 {
-  //uip_ds6_nbr_t *nbr = NULL;
-  //uip_ipaddr_t *nexthop;
+//  uip_ds6_nbr_t *nbr = NULL;
+//  uip_ipaddr_t *nexthop;
 
   if(uip_len == 0) {
     return;
@@ -670,7 +677,7 @@ tcpip_ipv6_output(void)
   uip_len = 0;
   uip_ext_len = 0;
 }
-#endif // UIP_CONF_IPV6
+#endif /* UIP_CONF_IPV6 */
 /*---------------------------------------------------------------------------*/
 #if UIP_UDP
 void
@@ -678,7 +685,7 @@ tcpip_poll_udp(struct uip_udp_conn *conn)
 {
   process_post(&tcpip_process, UDP_POLL, conn);
 }
-#endif // UIP_UDP
+#endif /* UIP_UDP */
 /*---------------------------------------------------------------------------*/
 #if UIP_TCP
 void
@@ -686,7 +693,7 @@ tcpip_poll_tcp(struct uip_conn *conn)
 {
   process_post(&tcpip_process, TCP_POLL, conn);
 }
-#endif // UIP_TCP
+#endif /* UIP_TCP */
 /*---------------------------------------------------------------------------*/
 void
 tcpip_uipcall(void)
@@ -699,33 +706,34 @@ tcpip_uipcall(void)
   } else {
     ts = &uip_udp_conn->appstate;
   }
-#else // UIP_UDP
+#else /* UIP_UDP */
   ts = &uip_conn->appstate;
-#endif // UIP_UDP
+#endif /* UIP_UDP */
 
 #if UIP_TCP
  {
    static unsigned char i;
    struct listenport *l;
    
-   // If this is a connection request for a listening port,
-   // we must mark the connection with the right process ID.
+   /* If this is a connection request for a listening port, we must
+      mark the connection with the right process ID. */
    if(uip_connected()) {
      l = &s.listenports[0];
      for(i = 0; i < UIP_LISTENPORTS; ++i) {
-       if(l->port == uip_conn->lport && l->p != PROCESS_NONE) {
-         ts->p = l->p;
-         ts->state = NULL;
-         break;
+       if(l->port == uip_conn->lport &&
+	  l->p != PROCESS_NONE) {
+	 ts->p = l->p;
+	 ts->state = NULL;
+	 break;
        }
        ++l;
      }
      
-     // Start the periodic polling, if it isn't already active.
+     /* Start the periodic polling, if it isn't already active. */
      start_periodic_tcp_timer();
    }
  }
-#endif // UIP_TCP
+#endif /* UIP_TCP */
   
   if(ts->p != NULL) {
     process_post_synch(ts->p, tcpip_event, ts->state);
@@ -745,21 +753,19 @@ PROCESS_THREAD(tcpip_process, ev, data)
    }
    s.p = PROCESS_CURRENT();
  }
-#endif // UIP_TCP
+#endif
 
   tcpip_event = process_alloc_event();
-
 #if UIP_CONF_ICMP6
   tcpip_icmp6_event = process_alloc_event();
-#endif // UIP_CONF_ICMP6
-
-  etimer_set(&periodic, CLOCK_SECOND * 2);
+#endif /* UIP_CONF_ICMP6 */
+  etimer_set(&periodic, CLOCK_SECOND / 2);
 
   uip_init();
 //#ifdef UIP_FALLBACK_INTERFACE
 //  UIP_FALLBACK_INTERFACE.init();
 //#endif
-/* initialize RPL if configured for using RPL */
+///* initialize RPL if configured for using RPL */
 //#if UIP_CONF_IPV6 && UIP_CONF_IPV6_RPL
 //  rpl_init();
 //#endif /* UIP_CONF_IPV6_RPL */

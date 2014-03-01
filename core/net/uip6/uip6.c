@@ -915,13 +915,11 @@ uip_process(uint8_t flag)
 #if UIP_TCP
   register struct uip_conn *uip_connr = uip_conn;
 #endif /* UIP_TCP */
-
 #if UIP_UDP
   if(flag == UIP_UDP_SEND_CONN) {
     goto udp_send;
   }
 #endif /* UIP_UDP */
-
   uip_sappdata = uip_appdata = &uip_buf[UIP_IPTCPH_LEN + UIP_LLH_LEN];
    
   /* Check if we were invoked because of a poll request for a
@@ -1204,8 +1202,60 @@ uip_process(uint8_t flag)
 //      goto drop;
 //    }
 //  }
+//
+//
+//
+//  /* TBD Some Parameter problem messages */
+//  if(!uip_ds6_is_my_addr(&UIP_IP_BUF->destipaddr) &&
+//     !uip_ds6_is_my_maddr(&UIP_IP_BUF->destipaddr)) {
+//    if(!uip_is_addr_mcast(&UIP_IP_BUF->destipaddr) &&
+//       !uip_is_addr_link_local(&UIP_IP_BUF->destipaddr) &&
+//       !uip_is_addr_link_local(&UIP_IP_BUF->srcipaddr) &&
+//       !uip_is_addr_unspecified(&UIP_IP_BUF->srcipaddr) &&
+//       !uip_is_addr_loopback(&UIP_IP_BUF->destipaddr)) {
+//
+//
+//      /* Check MTU */
+//      if(uip_len > UIP_LINK_MTU) {
+//        uip_icmp6_error_output(ICMP6_PACKET_TOO_BIG, 0, UIP_LINK_MTU);
+//        UIP_STAT(++uip_stat.ip.drop);
+//        goto send;
+//      }
+//      /* Check Hop Limit */
+//      if(UIP_IP_BUF->ttl <= 1) {
+//        uip_icmp6_error_output(ICMP6_TIME_EXCEEDED,
+//                               ICMP6_TIME_EXCEED_TRANSIT, 0);
+//        UIP_STAT(++uip_stat.ip.drop);
+//        goto send;
+//      }
+//
+//#if UIP_CONF_IPV6_RPL
+//      rpl_update_header_empty();
+//#endif /* UIP_CONF_IPV6_RPL */
+//
+//      UIP_IP_BUF->ttl = UIP_IP_BUF->ttl - 1;
+//      PRINTF("Forwarding packet to ");
+//      PRINT6ADDR(&UIP_IP_BUF->destipaddr);
+//      PRINTF("\n");
+//      UIP_STAT(++uip_stat.ip.forwarded);
+//      goto send;
+//    } else {
+//      if((uip_is_addr_link_local(&UIP_IP_BUF->srcipaddr)) &&
+//         (!uip_is_addr_unspecified(&UIP_IP_BUF->srcipaddr)) &&
+//         (!uip_is_addr_loopback(&UIP_IP_BUF->destipaddr)) &&
+//         (!uip_is_addr_mcast(&UIP_IP_BUF->destipaddr)) &&
+//         (!uip_ds6_is_addr_onlink((&UIP_IP_BUF->destipaddr)))) {
+//        PRINTF("LL source address with off link destination, dropping\n");
+//        uip_icmp6_error_output(ICMP6_DST_UNREACH,
+//                               ICMP6_DST_UNREACH_NOTNEIGHBOR, 0);
+//        goto send;
+//      }
+//      PRINTF("Dropping packet, not for me and link local or multicast\n");
+//      UIP_STAT(++uip_stat.ip.drop);
+//      goto drop;
+//    }
+//  }
 //#else /* UIP_CONF_ROUTER */
-
   if(!uip_ds6_is_my_addr(&UIP_IP_BUF->destipaddr) &&
      !uip_ds6_is_my_maddr(&UIP_IP_BUF->destipaddr) &&
      !uip_is_addr_mcast(&UIP_IP_BUF->destipaddr)) {
@@ -1394,41 +1444,48 @@ uip_process(uint8_t flag)
 
   switch(UIP_ICMP_BUF->type) {
     case ICMP6_NS:
-      //uip_nd6_ns_input();
+//#if UIP_ND6_SEND_NA
+//      uip_nd6_ns_input();
+//#else /* UIP_ND6_SEND_NA */
       UIP_STAT(++uip_stat.icmp.drop);
       uip_len = 0;
+//#endif /* UIP_ND6_SEND_NA */
       break;
     case ICMP6_NA:
-      //uip_nd6_na_input();
+//#if UIP_ND6_SEND_NA
+//      uip_nd6_na_input();
+//#else /* UIP_ND6_SEND_NA */
       UIP_STAT(++uip_stat.icmp.drop);
       uip_len = 0;
+//#endif /* UIP_ND6_SEND_NA */
       break;
     case ICMP6_RS:
 //#if UIP_CONF_ROUTER && UIP_ND6_SEND_RA
 //    uip_nd6_rs_input();
 //#else /* UIP_CONF_ROUTER && UIP_ND6_SEND_RA */
-      UIP_STAT(++uip_stat.icmp.drop);
-      uip_len = 0;
+    UIP_STAT(++uip_stat.icmp.drop);
+    uip_len = 0;
 //#endif /* UIP_CONF_ROUTER && UIP_ND6_SEND_RA */
-      break;
-    case ICMP6_RA:
+    break;
+  case ICMP6_RA:
 //#if UIP_CONF_ROUTER
-//      UIP_STAT(++uip_stat.icmp.drop);
-//      uip_len = 0;
+//    UIP_STAT(++uip_stat.icmp.drop);
+//    uip_len = 0;
 //#else /* UIP_CONF_ROUTER */
-//      uip_nd6_ra_input();
+//    uip_nd6_ra_input();
 //#endif /* UIP_CONF_ROUTER */
-      break;
+    break;
 //#if UIP_CONF_IPV6_RPL
-//    case ICMP6_RPL:
-//      uip_rpl_input();
-//      break;
+//  case ICMP6_RPL:
+//    uip_rpl_input();
+//    break;
 //#endif /* UIP_CONF_IPV6_RPL */
     case ICMP6_ECHO_REQUEST:
       uip_icmp6_echo_request_input();
       break;
     case ICMP6_ECHO_REPLY:
-      /** \note We don't implement any application callback for now */
+      /** Call echo reply input function. */
+      uip_icmp6_echo_reply_input();
       PRINTF("Received an icmp6 echo reply\n");
       UIP_STAT(++uip_stat.icmp.recv);
       uip_len = 0;
@@ -1457,7 +1514,6 @@ uip_process(uint8_t flag)
   remove_ext_hdr();
 
   PRINTF("Receiving UDP packet\n");
-  UIP_STAT(++uip_stat.udp.recv);
  
   /* UDP processing is really just a hack. We don't do anything to the
      UDP/IP headers, but let the UDP application do all the hard
@@ -1509,10 +1565,10 @@ uip_process(uint8_t flag)
     }
   }
   PRINTF("udp: no matching connection found\n");
+  UIP_STAT(++uip_stat.udp.drop);
 
 #if UIP_UDP_SEND_UNREACH_NOPORT
   uip_icmp6_error_output(ICMP6_DST_UNREACH, ICMP6_DST_UNREACH_NOPORT, 0);
-  UIP_STAT(++uip_stat.ip.drop);
   goto send;
 #else
   goto drop;
@@ -1520,6 +1576,7 @@ uip_process(uint8_t flag)
 
  udp_found:
   PRINTF("In udp_found\n");
+  UIP_STAT(++uip_stat.udp.recv);
  
   uip_conn = NULL;
   uip_flags = UIP_NEWDATA;
@@ -1553,6 +1610,10 @@ uip_process(uint8_t flag)
   uip_ds6_select_src(&UIP_IP_BUF->srcipaddr, &UIP_IP_BUF->destipaddr);
 
   uip_appdata = &uip_buf[UIP_LLH_LEN + UIP_IPTCPH_LEN];
+
+//#if UIP_CONF_IPV6_RPL
+//  rpl_insert_header();
+//#endif /* UIP_CONF_IPV6_RPL */
 
 #if UIP_UDP_CHECKSUMS
   /* Calculate UDP checksum. */
@@ -1825,8 +1886,12 @@ uip_process(uint8_t flag)
         UIP_TCP_BUF->seqno[2] != uip_connr->rcv_nxt[2] ||
         UIP_TCP_BUF->seqno[3] != uip_connr->rcv_nxt[3])) {
 
-      if(UIP_TCP_BUF->flags & TCP_SYN) {
-        goto tcp_send_synack;
+      if((UIP_TCP_BUF->flags & TCP_SYN)) {
+        if((uip_connr->tcpstateflags & UIP_TS_MASK) == UIP_SYN_RCVD) {
+          goto tcp_send_synack;
+        } else if((uip_connr->tcpstateflags & UIP_TS_MASK) == UIP_SYN_SENT) {
+          goto tcp_send_syn;
+        }
       }
       goto tcp_send_ack;
     }
@@ -2308,12 +2373,23 @@ uip_send(const void *data, int len)
 {
   int copylen;
 #define MIN(a,b) ((a) < (b)? (a): (b))
-  copylen = MIN(len, UIP_BUFSIZE - UIP_LLH_LEN - UIP_TCPIP_HLEN -
-                (int)((char *)uip_sappdata - (char *)&uip_buf[UIP_LLH_LEN + UIP_TCPIP_HLEN]));
+
+  if(uip_sappdata != NULL) {
+    copylen = MIN(len, UIP_BUFSIZE - UIP_LLH_LEN - UIP_TCPIP_HLEN -
+                  (int)((char *)uip_sappdata -
+                        (char *)&uip_buf[UIP_LLH_LEN + UIP_TCPIP_HLEN]));
+  } else {
+    copylen = MIN(len, UIP_BUFSIZE - UIP_LLH_LEN - UIP_TCPIP_HLEN);
+  }
   if(copylen > 0) {
     uip_slen = copylen;
     if(data != uip_sappdata) {
-      memcpy(uip_sappdata, (data), uip_slen);
+      if(uip_sappdata == NULL) {
+        memcpy((char *)&uip_buf[UIP_LLH_LEN + UIP_TCPIP_HLEN],
+               (data), uip_slen);
+      } else {
+        memcpy(uip_sappdata, (data), uip_slen);
+      }
     }
   }
 }

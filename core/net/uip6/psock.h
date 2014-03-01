@@ -84,8 +84,8 @@
  *
  */
 
-#ifndef __PSOCK_H__
-#define __PSOCK_H__
+#ifndef PSOCK_H_
+#define PSOCK_H_
 
 #include "contiki.h"
 #include "uip.h"
@@ -400,7 +400,7 @@ char psock_newdata(struct psock *s);
 #define PSOCK_WAIT_THREAD(psock, condition)   \
   PT_WAIT_THREAD(&((psock)->pt), (condition))
 
-#endif /* __PSOCK_H__ */
+#endif /* PSOCK_H_ */
 
 /** @} */
 /** @} */

@@ -30,7 +30,6 @@
  *
  * Author: Adam Dunkels <adam@sics.se>
  *
- * $Id: psock.c,v 1.12 2010/06/15 14:19:22 nifi Exp $
  */
 
 #include <string.h>
@@ -125,16 +124,6 @@ buf_bufto(CC_REGISTER_ARG struct psock_buf *buf, uint8_t endmarker,
     return BUF_NOT_FOUND;
   }
 
-  while(*datalen > 0) {
-    c = **dataptr;
-    --*datalen;
-    ++*dataptr;
-    
-    if(c == endmarker) {
-      return BUF_FOUND | BUF_FULL;
-    }
-  }
-  
   return BUF_FULL;
 }
 /*---------------------------------------------------------------------------*/
@@ -144,20 +133,12 @@ data_is_sent_and_acked(CC_REGISTER_ARG struct psock *s)
   /* If data has previously been sent, and the data has been acked, we
      increase the send pointer and call send_data() to send more
      data. */
-//   printf("s->state = %d, uip_acked() %d\n",s->state, uip_acked());
   if(s->state != STATE_DATA_SENT || uip_rexmit()) {
-//     printf("Sending data, s->sendlen = %d\n",s->sendlen);
     if(s->sendlen > uip_mss()) {
       uip_send(s->sendptr, uip_mss());
     } else {
-      
       uip_send(s->sendptr, s->sendlen);
-//       printf("uip_send(s->sendptr, s->sendlen)\n");
     }
-//     s->state = STATE_ACKED;
-//     s->sendptr += s->sendlen;
-//     s->sendlen = 0;
-//     return 1;
     s->state = STATE_DATA_SENT;
     return 0;
   } else if(s->state == STATE_DATA_SENT && uip_acked()) {
@@ -178,7 +159,7 @@ PT_THREAD(psock_send(CC_REGISTER_ARG struct psock *s, const uint8_t *buf,
 		     unsigned int len))
 {
   PT_BEGIN(&s->psockpt);
-  
+
   /* If there is no data to send, we exit immediately. */
   if(len == 0) {
     PT_EXIT(&s->psockpt);
@@ -203,7 +184,7 @@ PT_THREAD(psock_send(CC_REGISTER_ARG struct psock *s, const uint8_t *buf,
   }
 
   s->state = STATE_NONE;
-//   printf("finished psock_send\n");
+  
   PT_END(&s->psockpt);
 }
 /*---------------------------------------------------------------------------*/
@@ -233,7 +214,7 @@ PT_THREAD(psock_generator_send(CC_REGISTER_ARG struct psock *s,
 
     /* Wait until all data is sent and acknowledged. */
  // if (!s->sendlen) break;   //useful debugging aid
-    PT_WAIT_UNTIL(&s->psockpt, uip_acked() || uip_rexmit());
+    PT_YIELD_UNTIL(&s->psockpt, uip_acked() || uip_rexmit());
   } while(!uip_acked());
   
   s->state = STATE_NONE;
@@ -283,9 +264,9 @@ PT_THREAD(psock_readto(CC_REGISTER_ARG struct psock *psock, unsigned char c))
       psock->readptr = (uint8_t *)uip_appdata;
       psock->readlen = uip_datalen();
     }
-  } while((buf_bufto(&psock->buf, c,
-		     &psock->readptr,
-		     &psock->readlen) & BUF_FOUND) == 0);
+  } while(buf_bufto(&psock->buf, c,
+		    &psock->readptr,
+		    &psock->readlen) == BUF_NOT_FOUND);
   
   if(psock_datalen(psock) == 0) {
     psock->state = STATE_NONE;

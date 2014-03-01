@@ -45,7 +45,7 @@ echo_msg_t echo_msg_buf;
 struct psock p_socket;
 
 //--------------------------------------------------------------------------------------------------
-uint8_t lwb_tcpip_input(uip_lladdr_t *a) {
+uint8_t lwb_tcpip_input(const uip_lladdr_t *a) {
     lwb_queue_packet((uint8_t *)UIP_IP_BUF, uip_len, 0);
     return 1;
 }

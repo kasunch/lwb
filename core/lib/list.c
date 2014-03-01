@@ -166,6 +166,9 @@ list_push(list_t list, void *item)
 {
   /*  struct list *l;*/
 
+  /* Make sure not to add the same element twice */
+  list_remove(list, item);
+
   ((struct list *)item)->next = *list;
   *list = item;
 }
@@ -306,6 +309,22 @@ list_insert(list_t list, void *previtem, void *newitem)
     ((struct list *)newitem)->next = ((struct list *)previtem)->next;
     ((struct list *)previtem)->next = newitem;
   }
+}
+/*---------------------------------------------------------------------------*/
+/**
+ * \brief      Get the next item following this item
+ * \param item A list item
+ * \returns    A next item on the list
+ *
+ *             This function takes a list item and returns the next
+ *             item on the list, or NULL if there are no more items on
+ *             the list. This function is used when iterating through
+ *             lists.
+ */
+void *
+list_item_next(void *item)
+{
+  return item == NULL? NULL: ((struct list *)item)->next;
 }
 /*---------------------------------------------------------------------------*/
 /** @} */
