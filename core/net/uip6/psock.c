@@ -183,6 +183,11 @@ PT_THREAD(psock_send(CC_REGISTER_ARG struct psock *s, const uint8_t *buf,
     PT_WAIT_UNTIL(&s->psockpt, data_is_sent_and_acked(s));
   }
 
+  if (uip_newdata()) {
+    // We have data along in the acknowledgment packet
+    s->readptr = (uint8_t *)uip_appdata;
+    s->readlen = uip_datalen();
+  }
   s->state = STATE_NONE;
   
   PT_END(&s->psockpt);
