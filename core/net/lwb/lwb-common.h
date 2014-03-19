@@ -163,6 +163,7 @@ typedef struct lwb_context {
     uint8_t         ui8arr_txrx_buf[LWB_MAX_TXRX_BUF_LEN]; ///< TX/RX buffer
     uint8_t         ui8_txrx_buf_len;        ///< The length of the data in TX/RX buffer
     uint8_t         ui8_poll_flags;          ///< Flags that indicate why LWB main process is polled.
+    uint8_t         ui8_n_my_slots;          ///< Number of slots allocated for the node
 
     // source node
     uint8_t         ui8_sync_state;         ///< Synchronization state
@@ -252,7 +253,7 @@ typedef struct stream_req_lst_item {
 /// @brief Glossy duration for synchronization (sending/receiving schedule) (30 ms)
 #define T_SYNC_ON                   (RTIMER_SECOND / 33)            // 30 ms
 /// @brief Gap between slots.
-#define T_GAP                       (RTIMER_SECOND / 25)           // 40 ms
+#define T_GAP                       (RTIMER_SECOND / 50)           // 40 ms
 /// @brief Time duration to exchange application data packets between external device 
 #define T_HSLP_APP_DATA             (RTIMER_SECOND / 33)           // 30 ms
 /// @brief Time duration to get new schedule from the external device

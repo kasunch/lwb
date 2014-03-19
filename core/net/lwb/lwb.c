@@ -71,6 +71,10 @@ void lwb_request_stream_mod(uint8_t ui8_id, uint16_t ui16_ipi) {
     lwb_g_rr_stream_mod(ui8_id, ui16_ipi);
 }
 
+//--------------------------------------------------------------------------------------------------
+uint8_t lwb_get_n_my_slots() {
+    return lwb_context.ui8_n_my_slots;
+}
 
 //--------------------------------------------------------------------------------------------------
 PROCESS_THREAD(lwb_main_process, ev, data)
@@ -98,4 +102,3 @@ PROCESS_THREAD(lwb_main_process, ev, data)
 
     return PT_ENDED;
 }
-

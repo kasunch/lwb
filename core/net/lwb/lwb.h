@@ -36,4 +36,8 @@ void lwb_request_stream_del(uint8_t ui8_id);
 /// @param ui16_ipi New inter-packet interval
 void lwb_request_stream_mod(uint8_t ui8_id, uint16_t ui16_ipi);
 
+/// @brief Return number of slots belong to the node
+/// @return Number of slots
+uint8_t lwb_get_n_my_slots();
+
 #endif // __LWB_H__

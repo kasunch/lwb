@@ -13,6 +13,7 @@
 #include "lwb-print.h"
 
 extern lwb_context_t lwb_context;
+extern uint16_t node_id;
 
 /// @brief We use the same proto thread for both host and source since only one mode is active at a time.
 static struct pt pt_lwb_g_sync;
@@ -72,7 +73,7 @@ PT_THREAD(lwb_g_sync_host(struct rtimer *t, lwb_context_t *p_context)) {
             // Glossy is not time synchronized (e.g. when no nodes are around)
             // So, we artificially update reference time by using schedule creation time of previous
             // schedule.
-            // Why "t_diff % 2" is used is explained under estimate_skew().
+            // Why "t_diff % 2" is used is explained under lwb_estimate_skew().
             uint16_t t_diff = CURRENT_SCHEDULE_INFO().ui16_time - OLD_SCHEDULE_INFO().ui16_time;
             lwb_context.ui16_t_sync_ref = lwb_context.ui16_t_sync_ref + (RTIMER_SECOND * (t_diff % 2));
             set_t_ref_l(lwb_context.ui16_t_sync_ref);
@@ -91,7 +92,21 @@ PT_THREAD(lwb_g_sync_host(struct rtimer *t, lwb_context_t *p_context)) {
 }
 
 //--------------------------------------------------------------------------------------------------
-static inline void estimate_skew() {
+static inline uint8_t lwb_get_n_my_slots() {
+    uint8_t ui8_slots = 0;
+    uint8_t i;
+
+    for (i = 0; i < N_CURRENT_DATA_SLOTS(); i++) {
+        if (node_id == CURRENT_SCHEDULE().ui16arr_slots[i]) {
+            ui8_slots++;
+        }
+    }
+
+    return ui8_slots;
+}
+
+//--------------------------------------------------------------------------------------------------
+static inline void lwb_estimate_skew() {
 
     uint16_t t_diff = CURRENT_SCHEDULE_INFO().ui16_time - OLD_SCHEDULE_INFO().ui16_time;
     // The maximum time that can be measured with rtimer (32 kHz) is 2.048 seconds before integer wrap-round.
@@ -149,7 +164,7 @@ static inline void compute_new_sync_state() {
 
                 lwb_context.ui16_t_sync_guard = T_GUARD;
                 lwb_context.ui16_t_sync_ref = GLOSSY_T_REF;
-                estimate_skew();
+                lwb_estimate_skew();
             }
             break;
         }
@@ -205,7 +220,7 @@ static inline void compute_new_sync_state() {
             CURRENT_SCHEDULE_INFO().ui8_T = OLD_SCHEDULE_INFO().ui8_T;
 
             // compute new reference time
-            // Why "ui16_t_diff % 2" is used is explained under estimate_skew().
+            // Why "ui16_t_diff % 2" is used is explained under lwb_estimate_skew().
             uint16_t ui16_t_diff = CURRENT_SCHEDULE_INFO().ui16_time - OLD_SCHEDULE_INFO().ui16_time;
             uint16_t new_t_ref = lwb_context.ui16_t_last_sync_ref +
                                  ((int32_t)ui16_t_diff * lwb_context.i32_skew / (int32_t)64) +
@@ -310,6 +325,7 @@ PT_THREAD(lwb_g_sync_source(struct rtimer *t, lwb_context_t *p_context)) {
                 lwb_sched_decompress(&CURRENT_SCHEDULE(),
                                      lwb_context.ui8arr_txrx_buf + sizeof(lwb_sched_info_t),
                                      lwb_context.ui8_txrx_buf_len - sizeof(lwb_sched_info_t));
+                lwb_context.ui8_n_my_slots = lwb_get_n_my_slots();
             } else {
                 // We just missed one schedule. We do not give up even if we miss one schedule.
                 // It is reasonable to assume that the next schedule is also to be the same.
