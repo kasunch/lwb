@@ -254,6 +254,8 @@ typedef struct stream_req_lst_item {
 #define T_SYNC_ON                   (RTIMER_SECOND / 33)            // 30 ms
 /// @brief Gap between slots.
 #define T_GAP                       (RTIMER_SECOND / 50)           // 40 ms
+/// @brief The gap between schedule and first data slots
+#define T_S_R_GAP                   (1 * T_GAP)
 /// @brief Time duration to exchange application data packets between external device 
 #define T_HSLP_APP_DATA             (RTIMER_SECOND / 33)           // 30 ms
 /// @brief Time duration to get new schedule from the external device
@@ -263,7 +265,7 @@ typedef struct stream_req_lst_item {
 #if COOJA
 #define T_RR_ON                     (RTIMER_SECOND / 25)            // 40 ms
 #else
-#define T_RR_ON                     (RTIMER_SECOND / 40)            // 25 ms
+#define T_RR_ON                     (RTIMER_SECOND / 33)            // 30 ms
 #endif
 /// @brief Glossy duration for free slots
 #define T_FREE_ON                   (RTIMER_SECOND / 100)           // 10 ms

@@ -498,7 +498,7 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
 
             // schedule Glossy for the next slot
             SCHEDULE(lwb_context.ui16_t_sync_ref,
-                     T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)),
+                     T_SYNC_ON + T_S_R_GAP + (ui8_slot_idx * (T_RR_ON + T_GAP)),
                      lwb_g_rr_host);
             PT_YIELD(&pt_lwb_g_rr);
 
@@ -511,7 +511,7 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
                              GLOSSY_NO_SYNC,
                              N_RR,
                              LWB_PKT_TYPE_STREAM_ACK,
-                             lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                             lwb_context.ui16_t_sync_ref + T_SYNC_ON + T_S_R_GAP + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
                              (rtimer_callback_t)lwb_g_rr_host,
                              &lwb_context.rt,
                              &lwb_context);
@@ -532,7 +532,7 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
                                  GLOSSY_NO_SYNC,
                                  N_RR,
                                  LWB_PKT_TYPE_DATA,
-                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + T_S_R_GAP + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
                                  (rtimer_callback_t)lwb_g_rr_host,
                                  &lwb_context.rt,
                                  &lwb_context);
@@ -552,7 +552,7 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
                              GLOSSY_NO_SYNC,
                              N_RR,
                              0,
-                             lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                             lwb_context.ui16_t_sync_ref + T_SYNC_ON + T_S_R_GAP + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
                              (rtimer_callback_t)lwb_g_rr_host,
                              &lwb_context.rt,
                              &lwb_context);
@@ -597,7 +597,7 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
 
             // schedule Glossy for the next slot.
             SCHEDULE(lwb_context.ui16_t_sync_ref,
-                     T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)),
+                     T_SYNC_ON + T_S_R_GAP + (ui8_slot_idx * (T_RR_ON + T_GAP)),
                      lwb_g_rr_host);
             PT_YIELD(&pt_lwb_g_rr);
 
@@ -607,7 +607,7 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
                          GLOSSY_NO_SYNC,
                          N_RR,
                          0,
-                         lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                         lwb_context.ui16_t_sync_ref + T_SYNC_ON + T_S_R_GAP + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
                          (rtimer_callback_t)lwb_g_rr_host,
                          &lwb_context.rt,
                          &lwb_context);
@@ -696,9 +696,8 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
 PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
     PT_BEGIN(&pt_lwb_g_rr);
 
-    // The first slot starts after 3 * T_GAP from the end of Glossy phase for schedule.
-    // starting time of a slot = T_REF + (3 * T_GAP) + (slot_idx * (T_RR_ON + T_GAP))
-    // end time of a slot      = T_REF + T_SYNC_ON + (3 * T_GAP) + (slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON
+    // starting time of a slot = T_REF + T_S_R_GAP + (slot_idx * (T_RR_ON + T_GAP))
+    // end time of a slot      = T_REF + T_SYNC_ON + T_S_R_GAP + (slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON
 
     while (1) {
         leds_on(LEDS_GREEN);
@@ -707,7 +706,7 @@ PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
 
             // schedule Glossy for the next slot
             SCHEDULE(lwb_context.ui16_t_sync_ref,
-                     T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)),
+                     T_SYNC_ON + T_S_R_GAP + (ui8_slot_idx * (T_RR_ON + T_GAP)),
                      lwb_g_rr_source);
             PT_YIELD(&pt_lwb_g_rr);
 
@@ -724,7 +723,7 @@ PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
                                  GLOSSY_NO_SYNC,
                                  N_RR,
                                  LWB_PKT_TYPE_DATA,
-                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + T_S_R_GAP + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
                                  (rtimer_callback_t)lwb_g_rr_source,
                                  &lwb_context.rt,
                                  &lwb_context);
@@ -744,7 +743,7 @@ PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
                              GLOSSY_NO_SYNC,
                              N_RR,
                              0,
-                             lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                             lwb_context.ui16_t_sync_ref + T_SYNC_ON + T_S_R_GAP + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
                              (rtimer_callback_t)lwb_g_rr_source,
                              &lwb_context.rt,
                              &lwb_context);
@@ -781,7 +780,7 @@ PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
 
             // schedule Glossy for the next slot.
             SCHEDULE(lwb_context.ui16_t_sync_ref,
-                     T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)),
+                     T_SYNC_ON + T_S_R_GAP + (ui8_slot_idx * (T_RR_ON + T_GAP)),
                      lwb_g_rr_source);
             PT_YIELD(&pt_lwb_g_rr);
 
@@ -795,7 +794,7 @@ PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
                                  GLOSSY_NO_SYNC,
                                  N_RR,
                                  LWB_PKT_TYPE_STREAM_REQ,
-                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + T_S_R_GAP + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
                                  (rtimer_callback_t)lwb_g_rr_source,
                                  &lwb_context.rt,
                                  &lwb_context);
@@ -814,7 +813,7 @@ PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
                                  GLOSSY_NO_SYNC,
                                  N_RR,
                                  0,
-                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                                 lwb_context.ui16_t_sync_ref + T_SYNC_ON + T_S_R_GAP + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
                                  (rtimer_callback_t)lwb_g_rr_source,
                                  &lwb_context.rt,
                                  &lwb_context);
@@ -832,7 +831,7 @@ PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
                              GLOSSY_NO_SYNC,
                              N_RR,
                              0,
-                             lwb_context.ui16_t_sync_ref + T_SYNC_ON + (3 * T_GAP) + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
+                             lwb_context.ui16_t_sync_ref + T_SYNC_ON + T_S_R_GAP + (ui8_slot_idx * (T_RR_ON + T_GAP)) + T_RR_ON,
                              (rtimer_callback_t)lwb_g_rr_source,
                              &lwb_context.rt,
                              &lwb_context);
