@@ -496,6 +496,10 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
 
         for (ui8_slot_idx = 0; ui8_slot_idx < N_CURRENT_DATA_SLOTS(); ui8_slot_idx++) {
 
+#if LWB_HSLP
+                lwb_g_rr_hslp_receive_app_data();
+#endif // LWB_HSLP
+
             // schedule Glossy for the next slot
             SCHEDULE(lwb_context.ui16_t_sync_ref,
                      T_SYNC_ON + T_S_R_GAP + (ui8_slot_idx * (T_RR_ON + T_GAP)),
@@ -582,11 +586,6 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
                     // we haven't received Glossy flooding.
                     /// @todo Add stats about not received Glossy flooding.
                 }
-
-#if LWB_HSLP
-                lwb_g_rr_hslp_receive_app_data();
-#endif // LWB_HSLP
-
             }
         }
 
