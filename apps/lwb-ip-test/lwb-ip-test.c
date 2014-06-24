@@ -78,17 +78,19 @@ static PT_THREAD(server_handler())
 {
     PSOCK_BEGIN(&p_socket);
 
-    PSOCK_WAIT_UNTIL(&p_socket, PSOCK_NEWDATA(&p_socket));
+    while (1) {
+        PSOCK_WAIT_UNTIL(&p_socket, PSOCK_NEWDATA(&p_socket));
 
-    PSOCK_READBUF_LEN(&p_socket, sizeof(echo_msg_t));
+        PSOCK_READBUF_LEN(&p_socket, sizeof(echo_msg_t));
 
-    if (echo_msg_buf.ui8_type == ECHO_MSG_TYPE_REQ) {
+        if (echo_msg_buf.ui8_type == ECHO_MSG_TYPE_REQ) {
 
-        uint16_t c = (uint16_t)echo_msg_buf.ui8_counter_l + ((uint16_t)(echo_msg_buf.ui8_counter_h) << 8);
-        printf("received %u\n", c);
+            uint16_t c = (uint16_t)echo_msg_buf.ui8_counter_l + ((uint16_t)(echo_msg_buf.ui8_counter_h) << 8);
+            printf("received %u\n", c);
 
-        echo_msg_buf.ui8_type = ECHO_MSG_TYPE_RES;
-        PSOCK_SEND(&p_socket, (uint8_t *) &echo_msg_buf, sizeof(echo_msg_t));
+            echo_msg_buf.ui8_type = ECHO_MSG_TYPE_RES;
+            PSOCK_SEND(&p_socket, (uint8_t *) &echo_msg_buf, sizeof(echo_msg_t));
+        }
     }
 
     PSOCK_END(&p_socket);
@@ -101,23 +103,25 @@ static PT_THREAD(client_handler())
 {
     PSOCK_BEGIN(&p_socket);
 
-    echo_msg_buf.ui8_counter_l = (uint8_t)(ui16_echo_counter & 0xFF);
-    echo_msg_buf.ui8_counter_h = (uint8_t)(ui16_echo_counter >> 8);
-    echo_msg_buf.ui8_type = ECHO_MSG_TYPE_REQ;
+    while (1) {
+        echo_msg_buf.ui8_counter_l = (uint8_t)(ui16_echo_counter & 0xFF);
+        echo_msg_buf.ui8_counter_h = (uint8_t)(ui16_echo_counter >> 8);
+        echo_msg_buf.ui8_type = ECHO_MSG_TYPE_REQ;
 
-    printf("sending %u\n", ui16_echo_counter);
+        printf("sending %u\n", ui16_echo_counter);
 
-    PSOCK_SEND(&p_socket, (uint8_t *) &echo_msg_buf, sizeof(echo_msg_t));
+        PSOCK_SEND(&p_socket, (uint8_t *) &echo_msg_buf, sizeof(echo_msg_t));
 
-    PSOCK_WAIT_UNTIL(&p_socket, PSOCK_NEWDATA(&p_socket));
+        PSOCK_WAIT_UNTIL(&p_socket, PSOCK_NEWDATA(&p_socket));
 
-    PSOCK_READBUF_LEN(&p_socket, sizeof(echo_msg_t));
+        PSOCK_READBUF_LEN(&p_socket, sizeof(echo_msg_t));
 
-    if (echo_msg_buf.ui8_type == ECHO_MSG_TYPE_RES) {
+        if (echo_msg_buf.ui8_type == ECHO_MSG_TYPE_RES) {
 
-        uint16_t c = (uint16_t)echo_msg_buf.ui8_counter_l + ((uint16_t)(echo_msg_buf.ui8_counter_h) << 8);
-        printf("received %u\n", c);
-        ui16_echo_counter++;
+            uint16_t c = (uint16_t)echo_msg_buf.ui8_counter_l + ((uint16_t)(echo_msg_buf.ui8_counter_h) << 8);
+            printf("received %u\n", c);
+            ui16_echo_counter++;
+        }
     }
 
     PSOCK_END(&p_socket);
