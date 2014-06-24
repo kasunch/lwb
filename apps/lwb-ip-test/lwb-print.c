@@ -8,28 +8,7 @@
 
 extern lwb_context_t lwb_context;
 
-void print_stats();
-
-PROCESS(lwb_print, "lwb-print");
-
-PROCESS_THREAD(lwb_print, ev, data)
-{
-    PROCESS_BEGIN();
-
-    while (1) {
-
-        PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
-
-        print_stats();
-
-    }
-
-    PROCESS_END();
-
-    return PT_ENDED;
-}
-
-void print_stats() {
+void lwb_print_stats() {
 
     if (lwb_context.ui8_lwb_mode == LWB_MODE_SOURCE) {
         printf("state %u, ref %u, rtimer next %u, oflows %u, skew %ld, guard %u\n",

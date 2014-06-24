@@ -1,9 +1,7 @@
 #ifndef __LWB_PRINT_H__
 #define __LWB_PRINT_H__
 
-#include "contiki.h"
-
-PROCESS_NAME(lwb_print);
+void lwb_print_stats();
 
 #endif // __LWB_PRINT_H__
 
