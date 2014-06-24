@@ -7,7 +7,6 @@
 #include "lwb-g-sync.h"
 #include "lwb-g-rr.h"
 #include "lwb-scheduler.h"
-#include "lwb-print.h"
 
 #ifndef INIT_PERIOD
 #define INIT_PERIOD 1
@@ -35,7 +34,6 @@ uint8_t lwb_init(uint8_t ui8_mode, lwb_callbacks_t *p_callbacks) {
     lwb_g_sync_init();
     lwb_g_rr_init();
 
-    process_start(&lwb_print, NULL);
     process_start(&lwb_main_process, NULL);
     process_start(&glossy_process, NULL);
 

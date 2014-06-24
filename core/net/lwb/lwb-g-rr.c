@@ -663,10 +663,6 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
                                                            lwb_context.ui8arr_txrx_buf + lwb_context.ui8_txrx_buf_len,
                                                            LWB_MAX_TXRX_BUF_LEN - lwb_context.ui8_txrx_buf_len);
 
-        LWB_SET_POLL_FLAG(LWB_POLL_FLAGS_SCHED_END);
-        process_poll(&lwb_main_process);
-        process_poll(&lwb_print);
-
         // Schedule next Glossy synchronization based on old period.
         if (OLD_SCHEDULE_INFO().ui8_T == 1) {
             SCHEDULE(lwb_context.ui16_t_sync_ref,
@@ -682,6 +678,9 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
         }
 
         leds_off(LEDS_GREEN);
+
+        LWB_SET_POLL_FLAG(LWB_POLL_FLAGS_SCHED_END);
+        process_poll(&lwb_main_process);
 
         PT_YIELD(&pt_lwb_g_rr);
 
@@ -845,10 +844,6 @@ PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
         // Copy current schedule to old schedule
         memcpy(&OLD_SCHEDULE(), &CURRENT_SCHEDULE(), sizeof(lwb_schedule_t));
 
-        LWB_SET_POLL_FLAG(LWB_POLL_FLAGS_SCHED_END);
-        process_poll(&lwb_main_process);
-        process_poll(&lwb_print);
-
         // Now, we have iterated through all the data and free slots.
         // We have to schedule for receiving next round's schedule.
 
@@ -866,6 +861,10 @@ PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
         }
 
         leds_off(LEDS_GREEN);
+
+        LWB_SET_POLL_FLAG(LWB_POLL_FLAGS_SCHED_END);
+        process_poll(&lwb_main_process);
+
         PT_YIELD(&pt_lwb_g_rr);
     }
 

@@ -18,6 +18,8 @@ extern uint16_t node_id;
 /// @brief We use the same proto thread for both host and source since only one mode is active at a time.
 static struct pt pt_lwb_g_sync;
 
+PROCESS_NAME(lwb_main_process);
+
 //--------------------------------------------------------------------------------------------------
 void lwb_g_sync_init() {
     PT_INIT(&pt_lwb_g_sync);
@@ -365,7 +367,8 @@ PT_THREAD(lwb_g_sync_source(struct rtimer *t, lwb_context_t *p_context)) {
                                lwb_g_sync_source);
                 }
 
-                process_poll(&lwb_print);
+                LWB_SET_POLL_FLAG(LWB_POLL_FLAGS_SCHED_END);
+                process_poll(&lwb_main_process);
 
                 PT_YIELD(&pt_lwb_g_sync);
             } else {
