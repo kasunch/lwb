@@ -14,6 +14,8 @@
 
 #include "lwb-default-conf.h"
 
+#define LWB_MAX_SLOTS_UNIT_TIME ((uint8_t)((RTIMER_SECOND - T_SYNC_ON - T_HSLP_SCHED)/(T_GAP + T_RR_ON)) - 1)
+
 /// @brief LWB mode.
 typedef enum {
     LWB_MODE_HOST = 1,  ///< LWB in host mode.

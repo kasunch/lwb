@@ -1,6 +1,7 @@
 #include "contiki.h"
 #include "lib/memb.h"
 #include "lib/list.h"
+#include "lib/random.h"
 
 #include "glossy.h"
 
@@ -9,10 +10,7 @@
 #include "lwb-macros.h"
 
 
-// Configurations
-#ifndef LWB_CONF_MAX_N_STREAMS
-#define LWB_CONF_MAX_N_STREAMS  20
-#endif
+
 
 typedef struct lwb_stream_info {
     struct lwb_stream_info *next;
@@ -29,13 +27,11 @@ extern uint16_t node_id;
 
 extern lwb_context_t lwb_context;
 
-MEMB(streams_memb, lwb_stream_info_t, LWB_CONF_MAX_N_STREAMS);
+MEMB(streams_memb, lwb_stream_info_t, LWB_MAX_N_STREAMS);
 
 LIST(streams_list);
 
 static uint16_t ui16_n_streams = 0;
-
-static uint8_t ui8_n_slots_assigned = 0;
 
 //--------------------------------------------------------------------------------------------------
 static void inline add_stream(uint16_t ui16_node_id, lwb_stream_req_t *p_req) {
@@ -123,29 +119,56 @@ void lwb_sched_init(void) {
 void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
 
     lwb_stream_info_t *prev_stream;
+    uint8_t ui8_n_slots_assigned = 0;
+    uint8_t ui8_n_free_slots = 0;
+    uint8_t ui8_n_full_rounds = 0;
+    uint8_t ui8_n_total_slots = 0;
+    uint8_t ui8_n_required_slots = 0;
 
 
     p_sched->sched_info.ui16_host_id = node_id;
     p_sched->sched_info.ui16_time = UI32_GET_LOW(lwb_context.ui32_time);
 
+    ui8_n_free_slots = (uint8_t)(random_rand() % 2);
 
-    ui8_n_slots_assigned = 0;
+    if (lwb_context.ui8_n_stream_acks > 0) {
+        ui8_n_required_slots++;
+    }
+
+    ui8_n_required_slots += ui16_n_streams;
+    ui8_n_required_slots += ui8_n_free_slots;
+
+    ui8_n_full_rounds = ui8_n_required_slots / LWB_MAX_SLOTS_UNIT_TIME;
+
+    if (ui8_n_full_rounds == 0) {
+        p_sched->sched_info.ui8_T = 1;
+    } else {
+        if (ui8_n_required_slots % LWB_MAX_SLOTS_UNIT_TIME != 0) {
+            p_sched->sched_info.ui8_T = ui8_n_full_rounds + 1;
+        } else {
+            p_sched->sched_info.ui8_T = ui8_n_full_rounds;
+        }
+    }
+
+    ui8_n_total_slots = p_sched->sched_info.ui8_T * LWB_MAX_SLOTS_UNIT_TIME;
 
     if (lwb_context.ui8_n_stream_acks > 0) {
         p_sched->ui16arr_slots[ui8_n_slots_assigned++] = 0;
     }
 
+    while ((ui16_n_streams != 0) &&
+           (ui8_n_slots_assigned < ui8_n_total_slots - ui8_n_free_slots)) {
 
-    for (prev_stream = list_head(streams_list);
-         prev_stream != NULL && ui8_n_slots_assigned < LWB_SCHED_MAX_SLOTS;
-         prev_stream = prev_stream->next) {
-        p_sched->ui16arr_slots[ui8_n_slots_assigned++] = prev_stream->ui16_node_id;
+        for (prev_stream = list_head(streams_list);
+             prev_stream != NULL;
+             prev_stream = prev_stream->next) {
+            p_sched->ui16arr_slots[ui8_n_slots_assigned++] = prev_stream->ui16_node_id;
+        }
     }
 
-
-    p_sched->sched_info.ui8_T = 1;
-    SET_N_FREE_SLOTS(p_sched->sched_info.ui8_n_slots, 2);
+    SET_N_FREE_SLOTS(p_sched->sched_info.ui8_n_slots, ui8_n_free_slots);
     SET_N_DATA_SLOTS(p_sched->sched_info.ui8_n_slots, ui8_n_slots_assigned);
+
 }
 
 //--------------------------------------------------------------------------------------------------

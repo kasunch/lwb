@@ -29,6 +29,13 @@
 #endif
 
 
+/// @brief Maximum number of stream in the memory
+#ifdef LWB_CONF_MAX_N_STREAMS
+#define LWB_CONF_MAX_N_STREAMS      LWB_MAX_N_STREAMS
+#else
+#define LWB_MAX_N_STREAMS  20
+#endif
+
 /// @brief Maximum number of slots in a round
 #ifdef LWB_CONF_SCHED_MAX_SLOTS
 #define LWB_SCHED_MAX_SLOTS         LWB_CONF_SCHED_MAX_SLOTS
