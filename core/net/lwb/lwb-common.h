@@ -8,18 +8,11 @@
 
 #include "contiki.h"
 
-/// @defgroup Configurations
-/// @{
+#ifdef LWB_CUSTOM_CONF_H
+#include LWB_CUSTOM_CONF_H
+#endif
 
-
-#define LWB_MAX_TXRX_BUF_LEN    126
-
-
-#define LWB_SCHED_MAX_SLOTS      20
-
-
-/// @}
-
+#include "lwb-default-conf.h"
 
 /// @brief LWB mode.
 typedef enum {
@@ -167,6 +160,7 @@ typedef struct lwb_context {
 
     // source node
     uint8_t         ui8_sync_state;         ///< Synchronization state
+    uint8_t         ui8_joining_state;      ///< Joining state
 
     // hosts
     uint16_t        ui16arr_stream_akcs[LWB_SCHED_MAX_SLOTS];  ///< IDs of the nodes which stream acks to be sent
@@ -177,6 +171,11 @@ typedef struct lwb_context {
     lwb_data_stats_t            data_stats;
     lwb_stream_req_ack_stats_t  stream_req_ack_stats;
     lwb_sched_stats_t           sched_stats;
+
+    // for radio duty cycle of control packets
+    uint32_t ui32_en_control;
+    uint32_t ui32_en_rx;
+    uint32_t ui32_en_tx;
 
 
 } lwb_context_t;
@@ -242,50 +241,6 @@ typedef struct stream_req_lst_item {
 #define GLOSSY_IS_SYNCED()          (is_t_ref_l_updated())
 /// @brief Set glossy's reference time not updated.
 #define GLOSSY_SET_UNSYNCED()       (set_t_ref_l_updated(0))
-/// @}
-
-/// @addtogroup General configurations
-/// @{
-/// @brief Number of Glossy retransmissions for synchronization (sending/receiving schedule)
-#define N_SYNC                      3
-/// @brief Number of Glossy retransmissions for data slots
-#define N_RR                        3
-/// @brief Glossy duration for synchronization (sending/receiving schedule) (30 ms)
-#define T_SYNC_ON                   (RTIMER_SECOND / 33)            // 30 ms
-/// @brief Gap between slots.
-#define T_GAP                       (RTIMER_SECOND / 25)           // 40 ms
-/// @brief The gap between schedule and first data slots
-#define T_S_R_GAP                   (1 * T_GAP)
-/// @brief Time duration to exchange application data packets between external device 
-#define T_HSLP_APP_DATA             (RTIMER_SECOND / 33)           // 30 ms
-/// @brief Time duration to get new schedule from the external device
-#define T_HSLP_SCHED                (RTIMER_SECOND / 25)            // 40 ms
-
-/// @brief Glossy duration for data slots (20 ms)
-#if COOJA
-#define T_RR_ON                     (RTIMER_SECOND / 25)            // 40 ms
-#else
-#define T_RR_ON                     (RTIMER_SECOND / 33)            // 30 ms
-#endif
-/// @brief Glossy duration for free slots
-#define T_FREE_ON                   (RTIMER_SECOND / 100)           // 10 ms
-
-/// @brief Guard time 1
-#define T_GUARD_1                   (RTIMER_SECOND / 333)           //  03 ms
-/// @brief Guard time 2
-#define T_GUARD_2                   (RTIMER_SECOND / 200)           //  05 ms
-/// @brief Guard time 3
-#define T_GUARD_3                   (RTIMER_SECOND /  50)           //  20 ms
-
-#if COOJA
-/// @brief Normal guard time
-#define T_GUARD                     (RTIMER_SECOND / 250)           //  04 ms
-#else
-/// @brief Normal guard time
-#define T_GUARD                     (RTIMER_SECOND / 2000)          // 500 us
-#endif
-
-
 /// @}
 
 #endif // __LWB_COMMON_H__

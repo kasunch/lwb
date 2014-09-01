@@ -20,6 +20,23 @@ static struct pt pt_lwb_g_sync;
 
 PROCESS_NAME(lwb_main_process);
 
+void lwb_save_ctrl_energest() {
+    // This function should be called before starting Glossy for schedules, stream requests and
+    // stream acknowledgments
+#if LWB_CONTROL_DC
+    lwb_context.ui32_en_rx = energest_type_time(ENERGEST_TYPE_LISTEN);
+    lwb_context.ui32_en_tx = energest_type_time(ENERGEST_TYPE_TRANSMIT);
+#endif // LWB_CONTROL_DC
+}
+void lwb_update_ctrl_energest() {
+    // This function should be called after Glossy finishes for schedules, stream requests and
+    // stream acknowledgments
+#if LWB_CONTROL_DC
+    lwb_context.ui32_en_control += (energest_type_time(ENERGEST_TYPE_LISTEN) - lwb_context.ui32_en_rx) +
+                                    (energest_type_time(ENERGEST_TYPE_TRANSMIT) - lwb_context.ui32_en_tx);
+#endif // LWB_CONTROL_DC
+}
+
 //--------------------------------------------------------------------------------------------------
 void lwb_g_sync_init() {
     PT_INIT(&pt_lwb_g_sync);
@@ -252,6 +269,7 @@ PT_THREAD(lwb_g_sync_source(struct rtimer *t, lwb_context_t *p_context)) {
         if (lwb_context.ui8_sync_state == LWB_SYNC_STATE_BOOTSTRAP) {
             // We are in the bootstrap mode.
             // Start Glossy to receive initial schedule.
+            lwb_save_ctrl_energest();
             glossy_start(lwb_context.ui8arr_txrx_buf,
                          0,
                          GLOSSY_RECEIVER,
@@ -268,6 +286,7 @@ PT_THREAD(lwb_g_sync_source(struct rtimer *t, lwb_context_t *p_context)) {
                 // We have to receive the initial schedule in order to proceed.
                 // Therefore, we loop until we receive a schedule.
                 glossy_stop();
+                lwb_update_ctrl_energest();
 
                 //process_poll(&lwb_print);
 
@@ -275,6 +294,7 @@ PT_THREAD(lwb_g_sync_source(struct rtimer *t, lwb_context_t *p_context)) {
                 //rtimer_clock_t now = RTIMER_NOW();
                 //while (RTIMER_CLOCK_LT(RTIMER_NOW(), now + RTIMER_SECOND / 20));
 
+                lwb_save_ctrl_energest();
                 glossy_start(lwb_context.ui8arr_txrx_buf,
                              0,
                              GLOSSY_RECEIVER,
@@ -291,6 +311,7 @@ PT_THREAD(lwb_g_sync_source(struct rtimer *t, lwb_context_t *p_context)) {
         } else {
             // We are not in the bootstrap mode.
             // we try to receive schedule
+            lwb_save_ctrl_energest();
             glossy_start(lwb_context.ui8arr_txrx_buf,
                          0,
                          GLOSSY_RECEIVER,
@@ -305,6 +326,7 @@ PT_THREAD(lwb_g_sync_source(struct rtimer *t, lwb_context_t *p_context)) {
         }
 
         glossy_stop();
+        lwb_update_ctrl_energest();
 
         if (get_rx_cnt() && (get_header() != LWB_PKT_TYPE_SCHED)) {
           // We have received Glossy but not with the schedule header.

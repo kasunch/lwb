@@ -1,6 +1,7 @@
 #ifndef __LWB_H__
 #define __LWB_H__
 
+/// @file lwb.h
 /// @brief Application header file for LWB
 
 #include "lwb-common.h"
@@ -39,5 +40,9 @@ void lwb_request_stream_mod(uint8_t ui8_id, uint16_t ui16_ipi);
 /// @brief Return number of slots belong to the node
 /// @return Number of slots
 uint8_t lwb_get_n_my_slots();
+
+/// @brief Get LWB joining state
+/// @return one of the states from @link lwb_joining_state_t
+uint8_t lwb_get_joining_state();
 
 #endif // __LWB_H__
