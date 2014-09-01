@@ -48,7 +48,7 @@ static uint8_t ui8_tx_buf_q_size = 0;
 static uint8_t ui8_rx_buf_q_size = 0;
 
 /// @brief Memory block allocation space for stream requests
-MEMB(mmb_stream_req, stream_req_lst_item_t, LWB_CONF_MAX_STREAM_REQ_ELEMENTS);
+MEMB(mmb_stream_req, stream_req_lst_item_t, LWB_MAX_STREAM_REQ_ELEMENTS);
 /// @brief List for stream requests to be sent
 LIST(lst_stream_req);
 /// @brief Number of stream requests to be sent

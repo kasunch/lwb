@@ -15,14 +15,14 @@
 #endif
 
 /// @brief Maximum number of data buffer elements
-#ifndef LWB_CONF_MAX_DATA_BUF_ELEMENTS
+#ifdef LWB_CONF_MAX_DATA_BUF_ELEMENTS
 #define LWB_MAX_DATA_BUF_ELEMENTS   LWB_CONF_MAX_DATA_BUF_ELEMENTS
 #else
 #define LWB_MAX_DATA_BUF_ELEMENTS   5
 #endif
 
 /// @brief Maximum number of stream request elements
-#ifndef LWB_CONF_MAX_STREAM_REQ_ELEMENTS
+#ifdef LWB_CONF_MAX_STREAM_REQ_ELEMENTS
 #define LWB_MAX_STREAM_REQ_ELEMENTS LWB_CONF_MAX_STREAM_REQ_ELEMENTS
 #else
 #define LWB_MAX_STREAM_REQ_ELEMENTS 5
