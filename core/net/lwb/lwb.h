@@ -23,7 +23,7 @@ uint8_t lwb_queue_packet(uint8_t* p_data, uint8_t ui8_len, uint16_t ui16_to_node
 uint32_t lwb_get_host_time();
 
 /// @brief Request from LWB host to add a stream for the node.
-/// @param ui16_ipi Inter-packet interval in seconds.
+/// @param ipi Inter-packet interval in seconds.
 /// @param ui16_time_offset The time offset when the slot should be allocated.
 /// @return The ID of the stream
 uint8_t lwb_request_stream_add(uint16_t ui16_ipi, uint16_t ui16_time_offset);
@@ -34,7 +34,7 @@ void lwb_request_stream_del(uint8_t ui8_id);
 
 /// @brief Request from LWB host to modify a stream request.
 /// @param ui8_id The ID of the stream to be modified.
-/// @param ui16_ipi New inter-packet interval
+/// @param ipi New inter-packet interval
 void lwb_request_stream_mod(uint8_t ui8_id, uint16_t ui16_ipi);
 
 /// @brief Return number of slots belong to the node

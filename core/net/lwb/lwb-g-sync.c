@@ -10,7 +10,6 @@
 #include "lwb-g-sync.h"
 #include "lwb-g-rr.h"
 #include "lwb-sched-compressor.h"
-#include "lwb-print.h"
 
 extern lwb_context_t lwb_context;
 extern uint16_t node_id;
@@ -24,16 +23,16 @@ void lwb_save_ctrl_energest() {
     // This function should be called before starting Glossy for schedules, stream requests and
     // stream acknowledgments
 #if LWB_CONTROL_DC
-    lwb_context.ui32_en_rx = energest_type_time(ENERGEST_TYPE_LISTEN);
-    lwb_context.ui32_en_tx = energest_type_time(ENERGEST_TYPE_TRANSMIT);
+    lwb_context.en_rx = energest_type_time(ENERGEST_TYPE_LISTEN);
+    lwb_context.en_tx = energest_type_time(ENERGEST_TYPE_TRANSMIT);
 #endif // LWB_CONTROL_DC
 }
 void lwb_update_ctrl_energest() {
     // This function should be called after Glossy finishes for schedules, stream requests and
     // stream acknowledgments
 #if LWB_CONTROL_DC
-    lwb_context.ui32_en_control += (energest_type_time(ENERGEST_TYPE_LISTEN) - lwb_context.ui32_en_rx) +
-                                    (energest_type_time(ENERGEST_TYPE_TRANSMIT) - lwb_context.ui32_en_tx);
+    lwb_context.en_control += (energest_type_time(ENERGEST_TYPE_LISTEN) - lwb_context.en_rx) +
+                                    (energest_type_time(ENERGEST_TYPE_TRANSMIT) - lwb_context.en_tx);
 #endif // LWB_CONTROL_DC
 }
 
@@ -49,24 +48,24 @@ PT_THREAD(lwb_g_sync_host(struct rtimer *t, lwb_context_t *p_context)) {
 
     // Compress and copy the schedule to buffer
     memcpy(lwb_context.ui8arr_txrx_buf, &CURRENT_SCHEDULE_INFO(), sizeof(lwb_sched_info_t));
-    lwb_context.ui8_txrx_buf_len = sizeof(lwb_sched_info_t);
-    lwb_context.ui8_txrx_buf_len += lwb_sched_compress(&CURRENT_SCHEDULE(),
-                                                       lwb_context.ui8arr_txrx_buf + lwb_context.ui8_txrx_buf_len,
-                                                       LWB_MAX_TXRX_BUF_LEN - lwb_context.ui8_txrx_buf_len);
+    lwb_context.txrx_buf_len = sizeof(lwb_sched_info_t);
+    lwb_context.txrx_buf_len += lwb_sched_compress(&CURRENT_SCHEDULE(),
+                                                       lwb_context.ui8arr_txrx_buf + lwb_context.txrx_buf_len,
+                                                       LWB_MAX_TXRX_BUF_LEN - lwb_context.txrx_buf_len);
 
     // Assume the reference time is estimated 1 second ago.
-    lwb_context.ui16_t_sync_ref = RTIMER_TIME(t) - RTIMER_SECOND;
+    lwb_context.t_sync_ref = RTIMER_TIME(t) - RTIMER_SECOND;
 
     while (1) {
         leds_on(LEDS_GREEN);
 
-        lwb_context.ui16_t_start = RTIMER_TIME(t);
+        lwb_context.t_start = RTIMER_TIME(t);
 
         // Disseminate schedule
         // At this point, we expect the compressed scheduled to be in p_context->ui8arr_txrx_buf and
-        // p_context->ui8_txrx_buf_len is set accordingly.
+        // p_context->txrx_buf_len is set accordingly.
         glossy_start(lwb_context.ui8arr_txrx_buf,
-                     lwb_context.ui8_txrx_buf_len,
+                     lwb_context.txrx_buf_len,
                      GLOSSY_INITIATOR,
                      GLOSSY_SYNC,
                      N_SYNC,
@@ -80,11 +79,11 @@ PT_THREAD(lwb_g_sync_host(struct rtimer *t, lwb_context_t *p_context)) {
         leds_off(LEDS_GREEN);
         glossy_stop();
 
-        if (GLOSSY_IS_SYNCED() && RTIMER_CLOCK_LT(lwb_context.ui16_t_start, GLOSSY_T_REF)) {
+        if (GLOSSY_IS_SYNCED() && RTIMER_CLOCK_LT(lwb_context.t_start, GLOSSY_T_REF)) {
             // Glossy is time synchronized
             /// @todo find why RTIMER_CLOCK_LT is used in here.
             // we set the reference time taken from Glossy
-            lwb_context.ui16_t_sync_ref = GLOSSY_T_REF;
+            lwb_context.t_sync_ref = GLOSSY_T_REF;
 
             LWB_STATS_SYNC(ui16_synced)++;
 
@@ -93,9 +92,9 @@ PT_THREAD(lwb_g_sync_host(struct rtimer *t, lwb_context_t *p_context)) {
             // So, we artificially update reference time by using schedule creation time of previous
             // schedule.
             // Why "t_diff % 2" is used is explained under lwb_estimate_skew().
-            uint16_t t_diff = CURRENT_SCHEDULE_INFO().ui16_time - OLD_SCHEDULE_INFO().ui16_time;
-            lwb_context.ui16_t_sync_ref = lwb_context.ui16_t_sync_ref + (RTIMER_SECOND * (t_diff % 2));
-            set_t_ref_l(lwb_context.ui16_t_sync_ref);
+            uint16_t t_diff = CURRENT_SCHEDULE_INFO().time - OLD_SCHEDULE_INFO().time;
+            lwb_context.t_sync_ref = lwb_context.t_sync_ref + (RTIMER_SECOND * (t_diff % 2));
+            set_t_ref_l(lwb_context.t_sync_ref);
 
             LWB_STATS_SYNC(ui16_sync_missed)++;
         }
@@ -116,7 +115,7 @@ static inline uint8_t lwb_get_n_my_slots() {
     uint8_t i;
 
     for (i = 0; i < N_CURRENT_DATA_SLOTS(); i++) {
-        if (node_id == CURRENT_SCHEDULE().ui16arr_slots[i]) {
+        if (node_id == CURRENT_SCHEDULE().slots[i]) {
             ui8_slots++;
         }
     }
@@ -127,11 +126,11 @@ static inline uint8_t lwb_get_n_my_slots() {
 //--------------------------------------------------------------------------------------------------
 static inline void lwb_estimate_skew() {
 
-    uint16_t t_diff = CURRENT_SCHEDULE_INFO().ui16_time - OLD_SCHEDULE_INFO().ui16_time;
+    uint16_t t_diff = CURRENT_SCHEDULE_INFO().time - OLD_SCHEDULE_INFO().time;
     // The maximum time that can be measured with rtimer (32 kHz) is 2.048 seconds before integer wrap-round.
     // This is due to 16-bit counters are used in Glossy.
     // Therefore, if t_diff is a multiple of 2, then we do not need to use it for skew calculation.
-    int16_t skew_tmp = lwb_context.ui16_t_sync_ref - (lwb_context.ui16_t_last_sync_ref + (uint16_t)RTIMER_SECOND * (t_diff % 2));
+    int16_t skew_tmp = lwb_context.t_sync_ref - (lwb_context.t_last_sync_ref + (uint16_t)RTIMER_SECOND * (t_diff % 2));
 
     if (skew_tmp < 500 && t_diff != 0) {
 
@@ -139,50 +138,50 @@ static inline void lwb_estimate_skew() {
         ///       I think 64 is used to make skew_tmp large. The skew_tmp is calculated in rtimer
         ///       clock ticks. If it is smaller than t_diff, clock skew per unit time becomes zero.
         ///       Therefore, skew_tmp is multiplied by 64 to make it larger.
-        lwb_context.i32_skew = (int32_t)(64 * (int32_t)skew_tmp) / (int32_t)t_diff;
+        lwb_context.skew = (int32_t)(64 * (int32_t)skew_tmp) / (int32_t)t_diff;
         /// @todo "dirty hack" to temporary fix a Glossy bug that rarely occurs in disconnected networks
-        OLD_SCHEDULE_INFO().ui16_time = CURRENT_SCHEDULE_INFO().ui16_time;
-        lwb_context.ui16_t_last_sync_ref = GLOSSY_T_REF;
+        OLD_SCHEDULE_INFO().time = CURRENT_SCHEDULE_INFO().time;
+        lwb_context.t_last_sync_ref = GLOSSY_T_REF;
 
     } else {
 
-        lwb_context.ui8_sync_state = LWB_SYNC_STATE_BOOTSTRAP;
+        lwb_context.sync_state = LWB_SYNC_STATE_BOOTSTRAP;
         set_t_ref_l_updated(0);
     }
 }
 
 //--------------------------------------------------------------------------------------------------
 static inline void compute_new_sync_state() {
+
     if (GLOSSY_IS_SYNCED()) {
         // Reference time of Glossy is updated.
-
         LWB_STATS_SYNC(ui16_synced)++;
 
-        if (CURRENT_SCHEDULE_INFO().ui16_time < OLD_SCHEDULE_INFO().ui16_time) {
+        if (CURRENT_SCHEDULE_INFO().time < OLD_SCHEDULE_INFO().time) {
             // 16-bit overflow
             UI32_SET_HIGH(lwb_context.ui32_time, UI32_GET_HIGH(lwb_context.ui32_time) + 1);
         }
 
-        UI32_SET_LOW(lwb_context.ui32_time, CURRENT_SCHEDULE_INFO().ui16_time);
+        UI32_SET_LOW(lwb_context.ui32_time, CURRENT_SCHEDULE_INFO().time);
 
-        switch (lwb_context.ui8_sync_state) {
+        switch (lwb_context.sync_state) {
             case LWB_SYNC_STATE_BOOTSTRAP:
             {
-                lwb_context.ui8_sync_state = LWB_SYNC_STATE_QUASI_SYNCED;
+                lwb_context.sync_state = LWB_SYNC_STATE_QUASI_SYNCED;
 
-                lwb_context.ui16_t_sync_guard = T_GUARD_3;
-                lwb_context.ui16_t_last_sync_ref = GLOSSY_T_REF;
-                lwb_context.ui16_t_sync_ref = GLOSSY_T_REF;
+                lwb_context.t_sync_guard = T_GUARD_3;
+                lwb_context.t_last_sync_ref = GLOSSY_T_REF;
+                lwb_context.t_sync_ref = GLOSSY_T_REF;
             }
             break;
             default:
             {
                 // If Glossy's reference time is updated while in any other states,
                 // we consider LWB is synchronized.
-                lwb_context.ui8_sync_state = LWB_SYNC_STATE_SYNCED;
+                lwb_context.sync_state = LWB_SYNC_STATE_SYNCED;
 
-                lwb_context.ui16_t_sync_guard = T_GUARD;
-                lwb_context.ui16_t_sync_ref = GLOSSY_T_REF;
+                lwb_context.t_sync_guard = T_GUARD;
+                lwb_context.t_sync_ref = GLOSSY_T_REF;
                 lwb_estimate_skew();
             }
             break;
@@ -193,60 +192,60 @@ static inline void compute_new_sync_state() {
 
         LWB_STATS_SYNC(ui16_sync_missed)++;
 
-        switch (lwb_context.ui8_sync_state) {
+        switch (lwb_context.sync_state) {
             case LWB_SYNC_STATE_SYNCED:
             {
-                lwb_context.ui8_sync_state = LWB_SYNC_STATE_UNSYNCED_1;
-                lwb_context.ui16_t_sync_guard = T_GUARD_1;
+                lwb_context.sync_state = LWB_SYNC_STATE_UNSYNCED_1;
+                lwb_context.t_sync_guard = T_GUARD_1;
             }
             break;
             case LWB_SYNC_STATE_UNSYNCED_1:
             {
-                lwb_context.ui8_sync_state = LWB_SYNC_STATE_UNSYNCED_2;
-                lwb_context.ui16_t_sync_guard = T_GUARD_2;
+                lwb_context.sync_state = LWB_SYNC_STATE_UNSYNCED_2;
+                lwb_context.t_sync_guard = T_GUARD_2;
             }
             break;
             case LWB_SYNC_STATE_UNSYNCED_2:
             {
-                lwb_context.ui8_sync_state = LWB_SYNC_STATE_UNSYNCED_3;
-                lwb_context.ui16_t_sync_guard = T_GUARD_3;
+                lwb_context.sync_state = LWB_SYNC_STATE_UNSYNCED_3;
+                lwb_context.t_sync_guard = T_GUARD_3;
             }
             break;
             case LWB_SYNC_STATE_UNSYNCED_3:
             case LWB_SYNC_STATE_QUASI_SYNCED:
             {
                 // go back to bootstrap
-                lwb_context.ui8_sync_state = LWB_SYNC_STATE_BOOTSTRAP;
-                lwb_context.ui16_t_sync_guard = T_GUARD_3;
-                lwb_context.i32_skew = 0;
+                lwb_context.sync_state = LWB_SYNC_STATE_BOOTSTRAP;
+                lwb_context.t_sync_guard = T_GUARD_3;
+                lwb_context.skew = 0;
             }
             break;
             default:
                 break;
         }
 
-        if (lwb_context.ui8_sync_state != LWB_SYNC_STATE_BOOTSTRAP) {
+        if (lwb_context.sync_state != LWB_SYNC_STATE_BOOTSTRAP) {
             // We are not bootstrapping. So, we calculate the new schedule information based on the old one.
 
             // set new time based on old time
-            if (OLD_SCHEDULE_INFO().ui8_T == 1) {
-                CURRENT_SCHEDULE_INFO().ui16_time = OLD_SCHEDULE_INFO().ui16_time + 1;
+            if (OLD_SCHEDULE_INFO().round_period == 1) {
+                CURRENT_SCHEDULE_INFO().time = OLD_SCHEDULE_INFO().time + 1;
             } else {
-                /// @todo Find why sched_info.ui8_T - 1 is used
-                CURRENT_SCHEDULE_INFO().ui16_time = OLD_SCHEDULE_INFO().ui16_time + OLD_SCHEDULE_INFO().ui8_T;
+                /// @todo Find why sched_info.round_period - 1 is used
+                CURRENT_SCHEDULE_INFO().time = OLD_SCHEDULE_INFO().time + OLD_SCHEDULE_INFO().round_period;
             }
 
-            CURRENT_SCHEDULE_INFO().ui8_T = OLD_SCHEDULE_INFO().ui8_T;
+            CURRENT_SCHEDULE_INFO().round_period = OLD_SCHEDULE_INFO().round_period;
 
             // compute new reference time
             // Why "ui16_t_diff % 2" is used is explained under lwb_estimate_skew().
-            uint16_t ui16_t_diff = CURRENT_SCHEDULE_INFO().ui16_time - OLD_SCHEDULE_INFO().ui16_time;
-            uint16_t new_t_ref = lwb_context.ui16_t_last_sync_ref +
-                                 ((int32_t)ui16_t_diff * lwb_context.i32_skew / (int32_t)64) +
+            uint16_t ui16_t_diff = CURRENT_SCHEDULE_INFO().time - OLD_SCHEDULE_INFO().time;
+            uint16_t new_t_ref = lwb_context.t_last_sync_ref +
+                                 ((int32_t)ui16_t_diff * lwb_context.skew / (int32_t)64) +
                                  ((uint32_t)RTIMER_SECOND * (ui16_t_diff % 2));
             set_t_ref_l(new_t_ref);
-            lwb_context.ui16_t_last_sync_ref = new_t_ref;
-            lwb_context.ui16_t_sync_ref = new_t_ref;
+            lwb_context.t_last_sync_ref = new_t_ref;
+            lwb_context.t_sync_ref = new_t_ref;
 
         } else {
             // The new state is bootstrap. We do not calculate things based on old information.
@@ -261,12 +260,12 @@ static inline void compute_new_sync_state() {
 PT_THREAD(lwb_g_sync_source(struct rtimer *t, lwb_context_t *p_context)) {
     PT_BEGIN(&pt_lwb_g_sync);
 
-    lwb_context.ui8_sync_state = LWB_SYNC_STATE_BOOTSTRAP;
+    lwb_context.sync_state = LWB_SYNC_STATE_BOOTSTRAP;
 
     while (1) {
         leds_on(LEDS_GREEN);
 
-        if (lwb_context.ui8_sync_state == LWB_SYNC_STATE_BOOTSTRAP) {
+        if (lwb_context.sync_state == LWB_SYNC_STATE_BOOTSTRAP) {
             // We are in the bootstrap mode.
             // Start Glossy to receive initial schedule.
             lwb_save_ctrl_energest();
@@ -335,30 +334,30 @@ PT_THREAD(lwb_g_sync_source(struct rtimer *t, lwb_context_t *p_context)) {
           set_t_ref_l_updated(0);
         }
 
-        lwb_context.ui8_txrx_buf_len = get_data_len();
+        lwb_context.txrx_buf_len = get_data_len();
         // We copy only the schedule header.
         memcpy(&CURRENT_SCHEDULE_INFO(), lwb_context.ui8arr_txrx_buf, sizeof(lwb_sched_info_t));
         compute_new_sync_state();
 
-        if ((lwb_context.ui8_sync_state == LWB_SYNC_STATE_SYNCED || lwb_context.ui8_sync_state == LWB_SYNC_STATE_UNSYNCED_1)) {
+        if ((lwb_context.sync_state == LWB_SYNC_STATE_SYNCED || lwb_context.sync_state == LWB_SYNC_STATE_UNSYNCED_1)) {
             // We are synchronized or missed one schedule
 
-            if (lwb_context.ui8_sync_state == LWB_SYNC_STATE_SYNCED) {
+            if (lwb_context.sync_state == LWB_SYNC_STATE_SYNCED) {
                 // We decompress schedule if the state is synced. Otherwise, we do not need to do
                 // it since we copy the old schedule to current schedule
                 lwb_sched_decompress(&CURRENT_SCHEDULE(),
                                      lwb_context.ui8arr_txrx_buf + sizeof(lwb_sched_info_t),
-                                     lwb_context.ui8_txrx_buf_len - sizeof(lwb_sched_info_t));
-                lwb_context.ui8_n_my_slots = lwb_get_n_my_slots();
+                                     lwb_context.txrx_buf_len - sizeof(lwb_sched_info_t));
+                lwb_context.n_my_slots = lwb_get_n_my_slots();
             } else {
                 // We just missed one schedule. We do not give up even if we miss one schedule.
                 // It is reasonable to assume that the next schedule is also to be the same.
                 // So, we copy the old schedule to current one.
-                CURRENT_SCHEDULE_INFO().ui16_host_id = OLD_SCHEDULE_INFO().ui16_host_id;
-                CURRENT_SCHEDULE_INFO().ui8_n_slots = OLD_SCHEDULE_INFO().ui8_n_slots;
-                memcpy(CURRENT_SCHEDULE().ui16arr_slots,
-                       OLD_SCHEDULE().ui16arr_slots,
-                       sizeof(OLD_SCHEDULE().ui16arr_slots));
+                CURRENT_SCHEDULE_INFO().host_id = OLD_SCHEDULE_INFO().host_id;
+                CURRENT_SCHEDULE_INFO().n_slots = OLD_SCHEDULE_INFO().n_slots;
+                memcpy(CURRENT_SCHEDULE().slots,
+                       OLD_SCHEDULE().slots,
+                       sizeof(OLD_SCHEDULE().slots));
             }
 
             lwb_g_rr_source(t, p_context);
@@ -368,24 +367,24 @@ PT_THREAD(lwb_g_sync_source(struct rtimer *t, lwb_context_t *p_context)) {
         } else {
             // We are partially synchronized or missed more schedules or in bootstrap state.
 
-            if (lwb_context.ui8_sync_state != LWB_SYNC_STATE_BOOTSTRAP) {
+            if (lwb_context.sync_state != LWB_SYNC_STATE_BOOTSTRAP) {
 
                 // Copy current schedule information to old one
                 memcpy(&OLD_SCHEDULE_INFO(), &CURRENT_SCHEDULE_INFO(), sizeof(lwb_sched_info_t));
 
                 // We are not in bootstrap state. e.g. LWB_QUASI_SYNCED
-                if (CURRENT_SCHEDULE_INFO().ui8_T == 1) {
+                if (CURRENT_SCHEDULE_INFO().round_period == 1) {
                     // Round period is 1 second. Therefore, we can use rtimer_set()
                     // This is due to rtimer is 32 kHz and 16-bit counters are used.
-                    SCHEDULE(lwb_context.ui16_t_sync_ref,
-                             RTIMER_SECOND + (lwb_context.i32_skew / (int32_t)64) - lwb_context.ui16_t_sync_guard,
+                    SCHEDULE(lwb_context.t_sync_ref,
+                             RTIMER_SECOND + (lwb_context.skew / (int32_t)64) - lwb_context.t_sync_guard,
                              lwb_g_sync_source);
                 } else {
                     // Round period is not 1 second. Therefore, we use rtimer_set_long()
-                    SCHEDULE_L(lwb_context.ui16_t_sync_ref,
-                               (CURRENT_SCHEDULE_INFO().ui8_T * (uint32_t)RTIMER_SECOND) +
-                                                       ((int32_t)CURRENT_SCHEDULE_INFO().ui8_T * lwb_context.i32_skew / (int32_t)64) -
-                                                       lwb_context.ui16_t_sync_guard,
+                    SCHEDULE_L(lwb_context.t_sync_ref,
+                               (CURRENT_SCHEDULE_INFO().round_period * (uint32_t)RTIMER_SECOND) +
+                                                       ((int32_t)CURRENT_SCHEDULE_INFO().round_period * lwb_context.skew / (int32_t)64) -
+                                                       lwb_context.t_sync_guard,
                                lwb_g_sync_source);
                 }
 

@@ -8,15 +8,16 @@
 #include "uip6/uip-ds6.h"
 #include "uip6/psock.h"
 
+#include "lwb-print.h"
 
 PROCESS(lwb_test_process, "lwb test");
 AUTOSTART_PROCESSES(&lwb_test_process);
 
 
-#define LWB_CONF_HOST_ID             1
+#define LWB_CONF_HOST_ID             25
 
-#define LWB_CONF_DATA_ECHO_CLIENT    2
-#define LWB_CONF_DATA_ECHO_SERVER    3
+#define LWB_CONF_DATA_ECHO_CLIENT    1
+#define LWB_CONF_DATA_ECHO_SERVER    2
 
 //#define LWB_CONF_DATA_ECHO_CLIENT    7
 //#define LWB_CONF_DATA_ECHO_SERVER    11
@@ -59,6 +60,9 @@ void on_data(uint8_t *p_data, uint8_t ui8_len, uint16_t ui16_from_id) {
 
 //--------------------------------------------------------------------------------------------------
 void on_schedule_end(void) {
+
+    printf("slots %u\n", LWB_MAX_SLOTS_UNIT_TIME);
+    lwb_print_stats();
 
 }
 
@@ -133,6 +137,12 @@ static PT_THREAD(client_handler())
 PROCESS_THREAD(lwb_test_process, ev, data)
 {
     PROCESS_BEGIN();
+
+#ifdef CONTIKI_TARGET_SKY
+#if TX_POWER
+    cc2420_set_tx_power(TX_POWER);
+#endif // TX_POWER
+#endif // CONTIKI_TARGET_SKY
 
     if(node_id == LWB_CONF_HOST_ID) {
         lwb_init(LWB_MODE_HOST, &lwb_callbacks);

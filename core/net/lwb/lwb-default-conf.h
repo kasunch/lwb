@@ -158,6 +158,12 @@
 #endif
 
 
+#ifdef LWB_CONF_SCHED_N_CONS_MISSED_MAX
+#define LWB_SCHED_N_CONS_MISSED_MAX LWB_CONF_SCHED_N_CONS_MISSED_MAX
+#else
+#define LWB_SCHED_N_CONS_MISSED_MAX 60
+#endif
+
 /// @}
 
 #endif // __LWB_CONF_DEFAULT_H__
