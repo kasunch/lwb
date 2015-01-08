@@ -11,16 +11,16 @@
 #define LWB_SCHED_MAX_SLOTS      50
 
 typedef struct lwb_sched_info {
-    uint16_t ui16_host_id;
-    uint16_t ui16_time;
-    uint8_t  ui8_n_slots;
-    uint8_t  ui8_T;
+    uint16_t host_id;
+    uint16_t time;
+    uint8_t  n_slots;
+    uint8_t  round_period;
 } lwb_sched_info_t;
 
 
 typedef struct lwb_schedule {
     lwb_sched_info_t    sched_info;
-    uint16_t            ui16arr_slots[LWB_SCHED_MAX_SLOTS];
+    uint16_t            slots[LWB_SCHED_MAX_SLOTS];
 } lwb_schedule_t;
 
 #else

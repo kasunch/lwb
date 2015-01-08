@@ -33,24 +33,24 @@ uint8_t lwb_sched_compress(lwb_schedule_t *p_sched, uint8_t* p_buf, uint8_t ui8_
     uint8_t ui8_req_len = 0;
 
     // Finding number of maximum bits required
-    for (ui8_i = 0; ui8_i < GET_N_DATA_SLOTS(p_sched->sched_info.ui8_n_slots); ui8_i++) {
+    for (ui8_i = 0; ui8_i < GET_N_DATA_SLOTS(p_sched->sched_info.n_slots); ui8_i++) {
 
-        ui8_n_bits = get_n_bits(p_sched->ui16arr_slots[ui8_i]);
+        ui8_n_bits = get_n_bits(p_sched->slots[ui8_i]);
         if (ui8_n_bits > ui8_max_bits) {
           ui8_max_bits = ui8_n_bits;
         }
     }
 
     // Calculating required buffer length. 1 byte is additionally required to store bit length
-    ui8_req_len = (ui8_max_bits * GET_N_DATA_SLOTS(p_sched->sched_info.ui8_n_slots) / 8) +
-                  (((ui8_max_bits * GET_N_DATA_SLOTS(p_sched->sched_info.ui8_n_slots)) % 8) ? 1 : 0);
+    ui8_req_len = (ui8_max_bits * GET_N_DATA_SLOTS(p_sched->sched_info.n_slots) / 8) +
+                  (((ui8_max_bits * GET_N_DATA_SLOTS(p_sched->sched_info.n_slots)) % 8) ? 1 : 0);
 
     if (ui8_buf_len < ui8_req_len + 1) {
         // Not enough space in destination buffer
         return 0;
     }
 
-    if (COMP_BUFFER_LEN < ((ui8_max_bits * GET_N_DATA_SLOTS(p_sched->sched_info.ui8_n_slots) / 8) + 3)) {
+    if (COMP_BUFFER_LEN < ((ui8_max_bits * GET_N_DATA_SLOTS(p_sched->sched_info.n_slots) / 8) + 3)) {
         // compression buffer is not enough
         return 0;
     }
@@ -59,7 +59,7 @@ uint8_t lwb_sched_compress(lwb_schedule_t *p_sched, uint8_t* p_buf, uint8_t ui8_
     memset(ui8arr_comp_buf, 0, COMP_BUFFER_LEN);
 
     // Compressing
-    for (ui8_i = 0; ui8_i < GET_N_DATA_SLOTS(p_sched->sched_info.ui8_n_slots); ui8_i++) {
+    for (ui8_i = 0; ui8_i < GET_N_DATA_SLOTS(p_sched->sched_info.n_slots); ui8_i++) {
 
         ui16_bit_start = (uint16_t)ui8_i * (uint16_t)ui8_max_bits;
 
@@ -67,7 +67,7 @@ uint8_t lwb_sched_compress(lwb_schedule_t *p_sched, uint8_t* p_buf, uint8_t ui8_
                    ((uint32_t)ui8arr_comp_buf[(ui16_bit_start / 8) + 1] << 8) |
                    ((uint32_t)ui8arr_comp_buf[(ui16_bit_start / 8) + 2] << 16);
 
-        ui32_tmp |= (uint32_t)p_sched->ui16arr_slots[ui8_i] << (ui16_bit_start % 8);
+        ui32_tmp |= (uint32_t)p_sched->slots[ui8_i] << (ui16_bit_start % 8);
 
         ui8arr_comp_buf[(ui16_bit_start / 8)] = (uint8_t)(ui32_tmp & 0xFF);
         ui8arr_comp_buf[(ui16_bit_start / 8) + 1] = (uint8_t)((ui32_tmp >> 8) & 0xFF);
@@ -96,7 +96,7 @@ uint8_t lwb_sched_decompress(lwb_schedule_t *p_sched, uint8_t* p_buf, uint8_t ui
 
     ui8_max_bits = p_buf[0];
 
-    if (COMP_BUFFER_LEN < ((ui8_max_bits * GET_N_DATA_SLOTS(p_sched->sched_info.ui8_n_slots) / 8) + 3)) {
+    if (COMP_BUFFER_LEN < ((ui8_max_bits * GET_N_DATA_SLOTS(p_sched->sched_info.n_slots) / 8) + 3)) {
         // Not enough space in compression buffer
         return 0;
     }
@@ -106,7 +106,7 @@ uint8_t lwb_sched_decompress(lwb_schedule_t *p_sched, uint8_t* p_buf, uint8_t ui
     // copy compressed data to compression buffer
     memcpy(ui8arr_comp_buf, p_buf + 1, ui8_buf_len - 1);
 
-    for (ui8_i = 0; ui8_i < GET_N_DATA_SLOTS(p_sched->sched_info.ui8_n_slots); ui8_i++) {
+    for (ui8_i = 0; ui8_i < GET_N_DATA_SLOTS(p_sched->sched_info.n_slots); ui8_i++) {
 
         ui16_bit_start = (uint16_t)ui8_i * (uint16_t)ui8_max_bits;
 
@@ -114,10 +114,10 @@ uint8_t lwb_sched_decompress(lwb_schedule_t *p_sched, uint8_t* p_buf, uint8_t ui
                    ((uint32_t)ui8arr_comp_buf[ui16_bit_start / 8 + 1] << 8) |
                    ((uint32_t)ui8arr_comp_buf[ui16_bit_start / 8 + 2] << 16);
 
-        p_sched->ui16arr_slots[ui8_i] = (ui32_tmp >> (ui16_bit_start % 8)) & ((1 << ui8_max_bits) - 1);
+        p_sched->slots[ui8_i] = (ui32_tmp >> (ui16_bit_start % 8)) & ((1 << ui8_max_bits) - 1);
     }
 
-    return GET_N_DATA_SLOTS(p_sched->sched_info.ui8_n_slots);
+    return GET_N_DATA_SLOTS(p_sched->sched_info.n_slots);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -145,11 +145,11 @@ void print_comp_sched(uint8_t* p_buf, uint8_t ui8_buf_len) {
 
 void print_sched(lwb_schedule_t *p_sched) {
 
-    printf("S %03u | ", p_sched->sched_info.ui8_n_slots);
+    printf("S %03u | ", p_sched->sched_info.n_slots);
 
     uint8_t i = 0;
-    for (; i < p_sched->sched_info.ui8_n_slots; i++) {
-        printf("%04X ", p_sched->ui16arr_slots[i]);
+    for (; i < p_sched->sched_info.n_slots; i++) {
+        printf("%04X ", p_sched->slots[i]);
     }
 
     printf("\n");
@@ -161,22 +161,22 @@ int main(int argc, char *argv[]) {
     uint8_t status = 0;
 
     lwb_schedule_t sched;
-    sched.sched_info.ui16_host_id = 1;
-    sched.sched_info.ui16_time = 1;
-    sched.sched_info.ui8_T = 1;
-    sched.sched_info.ui8_n_slots = 10;
+    sched.sched_info.host_id = 1;
+    sched.sched_info.time = 1;
+    sched.sched_info.round_period = 1;
+    sched.sched_info.n_slots = 10;
 
-    sched.ui16arr_slots[0] = 0x0001;
-    sched.ui16arr_slots[1] = 0x0002;
-    sched.ui16arr_slots[2] = 0x0001;
-    sched.ui16arr_slots[3] = 0x00FA;
-    sched.ui16arr_slots[4] = 0x0003;
+    sched.slots[0] = 0x0001;
+    sched.slots[1] = 0x0002;
+    sched.slots[2] = 0x0001;
+    sched.slots[3] = 0x00FA;
+    sched.slots[4] = 0x0003;
 
-    sched.ui16arr_slots[5] = 0x00F1;
-    sched.ui16arr_slots[6] = 0x0001;
-    sched.ui16arr_slots[7] = 0x0002;
-    sched.ui16arr_slots[8] = 0x0003;
-    sched.ui16arr_slots[9] = 0x000F;
+    sched.slots[5] = 0x00F1;
+    sched.slots[6] = 0x0001;
+    sched.slots[7] = 0x0002;
+    sched.slots[8] = 0x0003;
+    sched.slots[9] = 0x000F;
 
 
     print_sched(&sched);
@@ -187,7 +187,7 @@ int main(int argc, char *argv[]) {
 
     print_comp_sched(buffer, status);
 
-    memset(sched.ui16arr_slots, 0, LWB_SCHED_MAX_SLOTS * 2);
+    memset(sched.slots, 0, LWB_SCHED_MAX_SLOTS * 2);
 
     status = lwb_sched_decompress(&sched, buffer, status);
 

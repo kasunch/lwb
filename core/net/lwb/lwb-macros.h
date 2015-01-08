@@ -8,8 +8,8 @@
 
 #include "lwb-common.h"
 
-#define N_CURRENT_DATA_SLOTS()          GET_N_DATA_SLOTS(lwb_context.current_sched.sched_info.ui8_n_slots)
-#define N_CURRENT_FREE_SLOTS()          GET_N_FREE_SLOTS(lwb_context.current_sched.sched_info.ui8_n_slots)
+#define N_CURRENT_DATA_SLOTS()          GET_N_DATA_SLOTS(lwb_context.current_sched.sched_info.n_slots)
+#define N_CURRENT_FREE_SLOTS()          GET_N_FREE_SLOTS(lwb_context.current_sched.sched_info.n_slots)
 #define CURRENT_SCHEDULE()              (lwb_context.current_sched)
 #define CURRENT_SCHEDULE_INFO()         (lwb_context.current_sched.sched_info)
 
@@ -21,9 +21,9 @@
 #define LWB_STATS_STREAM_REQ_ACK(statitem)  (lwb_context.stream_req_ack_stats.statitem)
 #define LWB_STATS_SCHED(statitem)       (lwb_context.sched_stats.statitem)
 
-#define LWB_SET_POLL_FLAG(flag)         (lwb_context.ui8_poll_flags |= 1 << flag)
-#define LWB_UNSET_POLL_FLAG(flag)       (lwb_context.ui8_poll_flags &= ~(1 << flag))
-#define LWB_IS_SET_POLL_FLAG(flag)      (lwb_context.ui8_poll_flags && (1 << flag))
+#define LWB_SET_POLL_FLAG(flag)         (lwb_context.poll_flags |= 1 << flag)
+#define LWB_UNSET_POLL_FLAG(flag)       (lwb_context.poll_flags &= ~(1 << flag))
+#define LWB_IS_SET_POLL_FLAG(flag)      (lwb_context.poll_flags && (1 << flag))
 
 /// @addtogroup rtimer scheduling
 ///             macro for rtimer based scheduling

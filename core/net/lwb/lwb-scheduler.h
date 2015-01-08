@@ -9,4 +9,6 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched);
 
 void lwb_sched_process_stream_req(uint16_t u16_id, lwb_stream_req_t *p_req);
 
+void lwb_sched_update_data_slot_usage(uint8_t slot_index, uint8_t used);
+
 #endif // __LWB_SCHEDULAR_H__

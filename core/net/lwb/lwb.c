@@ -22,7 +22,7 @@ uint8_t lwb_init(uint8_t ui8_mode, lwb_callbacks_t *p_callbacks) {
     memset(&lwb_context, 0, sizeof(lwb_context_t));
 
     /// TODO Initialize lwb_context
-    lwb_context.ui8_lwb_mode = ui8_mode;
+    lwb_context.lwb_mode = ui8_mode;
     lwb_context.p_callbacks = p_callbacks;
 
     // compute initial schedule.
@@ -42,7 +42,7 @@ uint8_t lwb_init(uint8_t ui8_mode, lwb_callbacks_t *p_callbacks) {
         SCHEDULE_L(RTIMER_NOW() - 10, INIT_PERIOD * (uint32_t)RTIMER_SECOND * 2, lwb_g_sync_host);
     } else {
         // source mode
-        lwb_context.ui8_joining_state = LWB_JOINING_STATE_NOT_JOINED;
+        lwb_context.joining_state = LWB_JOINING_STATE_NOT_JOINED;
         SCHEDULE_L(RTIMER_NOW() - 10, INIT_PERIOD * RTIMER_SECOND, lwb_g_sync_source);
     }
 
@@ -72,12 +72,12 @@ void lwb_request_stream_mod(uint8_t ui8_id, uint16_t ui16_ipi) {
 
 //--------------------------------------------------------------------------------------------------
 uint8_t lwb_get_n_my_slots() {
-    return lwb_context.ui8_n_my_slots;
+    return lwb_context.n_my_slots;
 }
 
 //--------------------------------------------------------------------------------------------------
 uint8_t lwb_get_joining_state() {
-    return lwb_context.ui8_joining_state;
+    return lwb_context.joining_state;
 }
 
 //--------------------------------------------------------------------------------------------------

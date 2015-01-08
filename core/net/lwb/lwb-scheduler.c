@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "contiki.h"
 #include "lib/memb.h"
 #include "lib/list.h"
@@ -10,19 +12,6 @@
 #include "lwb-macros.h"
 
 
-
-
-typedef struct lwb_stream_info {
-    struct lwb_stream_info *next;
-    uint16_t ui16_node_id;             ///< Node ID
-    uint16_t ui16_ipi;                 ///< Inter-packet interval in seconds
-    uint16_t ui16_last_assigned;
-    uint16_t ui16_next_ready;
-    uint8_t  ui8_stream_id;           ///< Stream ID
-    uint8_t  ui8_n_cons_missed;       ///< Number of consecutive slot misses for the stream
-} lwb_stream_info_t;
-
-
 extern uint16_t node_id;
 
 extern lwb_context_t lwb_context;
@@ -31,7 +20,10 @@ MEMB(streams_memb, lwb_stream_info_t, LWB_MAX_N_STREAMS);
 
 LIST(streams_list);
 
-static uint16_t ui16_n_streams = 0;
+static uint16_t n_streams = 0;
+
+lwb_stream_info_t* curr_sched_streams[LWB_SCHED_MAX_SLOTS];  ///< Pointer to the lwb_stream_info_t
+uint8_t n_curr_streams;                                ///< Number of streams
 
 //--------------------------------------------------------------------------------------------------
 static void inline add_stream(uint16_t ui16_node_id, lwb_stream_req_t *p_req) {
@@ -42,10 +34,10 @@ static void inline add_stream(uint16_t ui16_node_id, lwb_stream_req_t *p_req) {
     // insert the stream into the list, ordered by node id
     for (prev_stream = list_head(streams_list); prev_stream != NULL; prev_stream = prev_stream->next) {
 
-        if (ui16_node_id >= prev_stream->ui16_node_id) {
+        if (ui16_node_id >= prev_stream->node_id) {
 
-            if (ui16_node_id == prev_stream->ui16_node_id &&
-                GET_STREAM_ID(p_req->ui8_req_type) == prev_stream->ui8_stream_id) {
+            if (ui16_node_id == prev_stream->node_id &&
+                GET_STREAM_ID(p_req->req_type) == prev_stream->stream_id) {
                 // We have a stream add request with an existing stream ID.
                 // This could happen due to the node has not received the stream acknowledgment.
                 // So we add an acknowledgment from him. Otherwise he will keep sending stream
@@ -53,18 +45,18 @@ static void inline add_stream(uint16_t ui16_node_id, lwb_stream_req_t *p_req) {
 
                 LWB_STATS_SCHED(ui16_n_duplicates)++;
 
-                if (lwb_context.ui8_n_stream_acks >= LWB_SCHED_MAX_SLOTS) {
+                if (lwb_context.n_stream_acks >= LWB_SCHED_MAX_SLOTS) {
                     // Maximum space for stream acks exceeded.
                     // We just ignore the stream request.
                     return;
                 }
 
-                lwb_context.ui16arr_stream_akcs[lwb_context.ui8_n_stream_acks++] = ui16_node_id;
+                lwb_context.ui16arr_stream_akcs[lwb_context.n_stream_acks++] = ui16_node_id;
 
                 return;
             }
 
-            if ((prev_stream->next == NULL) || (ui16_node_id < prev_stream->next->ui16_node_id)) {
+            if ((prev_stream->next == NULL) || (ui16_node_id < prev_stream->next->node_id)) {
                 // We found the right place to add new stream information
                 break;
             }
@@ -78,16 +70,16 @@ static void inline add_stream(uint16_t ui16_node_id, lwb_stream_req_t *p_req) {
         return;
     }
 
-    stream->ui16_node_id = ui16_node_id;
-    stream->ui16_ipi = p_req->ui16_ipi;
-    stream->ui16_last_assigned = p_req->ui16_time_info - p_req->ui16_ipi;
-    stream->ui16_next_ready = p_req->ui16_time_info;
-    stream->ui8_stream_id = GET_STREAM_ID(p_req->ui8_req_type);
-    stream->ui8_n_cons_missed = 0;
+    memset(stream, 0, sizeof(lwb_stream_info_t));
+    stream->node_id = ui16_node_id;
+    stream->ipi = p_req->ipi;
+    stream->last_assigned = p_req->time_info - p_req->ipi;
+    stream->next_ready = p_req->time_info;
+    stream->stream_id = GET_STREAM_ID(p_req->req_type);
 
-    //  list_add(streams_list, stream);
     list_insert(streams_list, prev_stream, stream);
-    ui16_n_streams++;
+    n_streams++;
+
     LWB_STATS_SCHED(ui16_n_added)++;
 }
 
@@ -98,11 +90,11 @@ static void inline del_stream(uint16_t id, lwb_stream_req_t *p_req) {
 
     for (prev_stream = list_head(streams_list); prev_stream != NULL; prev_stream = prev_stream->next) {
 
-        if ((id == prev_stream->ui16_node_id) &&
-            (GET_STREAM_ID(p_req->ui8_req_type) == prev_stream->ui8_stream_id)) {
+        if ((id == prev_stream->node_id) &&
+            (GET_STREAM_ID(p_req->req_type) == prev_stream->stream_id)) {
 
             list_remove(streams_list, prev_stream);
-            ui16_n_streams--;
+            n_streams--;
             return;
         }
     }
@@ -118,63 +110,94 @@ void lwb_sched_init(void) {
 //--------------------------------------------------------------------------------------------------
 void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
 
-    lwb_stream_info_t *prev_stream;
-    uint8_t ui8_n_slots_assigned = 0;
-    uint8_t ui8_n_free_slots = 0;
-    uint8_t ui8_n_full_rounds = 0;
-    uint8_t ui8_n_total_slots = 0;
-    uint8_t ui8_n_required_slots = 0;
+    lwb_stream_info_t *crr_stream;
+    uint8_t n_data_slots_assigned = 0;
+    uint8_t n_free_slots;
+    uint8_t n_data_slots = 0;
+    uint8_t n_required_slots = 0;
+    uint8_t n_full_rounds;
 
+    // Recycle unused data slots based on activity
+    for (crr_stream = list_head(streams_list); crr_stream != NULL;) {
 
-    p_sched->sched_info.ui16_host_id = node_id;
-    p_sched->sched_info.ui16_time = UI32_GET_LOW(lwb_context.ui32_time);
+        // Reset counters before computing schedule
+        crr_stream->n_slots_allocated = 0;
+        crr_stream->n_slots_used = 0;
 
-    ui8_n_free_slots = (uint8_t)(random_rand() % 2);
+        if (crr_stream->n_cons_missed > LWB_SCHED_N_CONS_MISSED_MAX) {
 
-    if (lwb_context.ui8_n_stream_acks > 0) {
-        ui8_n_required_slots++;
-    }
+            lwb_stream_info_t *to_be_removed = crr_stream;
+            crr_stream = crr_stream->next;
+            list_remove(streams_list, to_be_removed);
+            n_streams--;
 
-    ui8_n_required_slots += ui16_n_streams;
-    ui8_n_required_slots += ui8_n_free_slots;
-
-    ui8_n_full_rounds = ui8_n_required_slots / LWB_MAX_SLOTS_UNIT_TIME;
-
-    if (ui8_n_full_rounds == 0) {
-        p_sched->sched_info.ui8_T = 1;
-    } else {
-        if (ui8_n_required_slots % LWB_MAX_SLOTS_UNIT_TIME != 0) {
-            p_sched->sched_info.ui8_T = ui8_n_full_rounds + 1;
         } else {
-            p_sched->sched_info.ui8_T = ui8_n_full_rounds;
+            crr_stream = crr_stream->next;
         }
     }
 
-    ui8_n_total_slots = p_sched->sched_info.ui8_T * LWB_MAX_SLOTS_UNIT_TIME;
+    // reset current streams
+    memset(curr_sched_streams, 0, sizeof(lwb_stream_info_t*) * LWB_SCHED_MAX_SLOTS);
+    n_curr_streams = 0;
 
-    if (lwb_context.ui8_n_stream_acks > 0) {
-        p_sched->ui16arr_slots[ui8_n_slots_assigned++] = 0;
+    p_sched->sched_info.host_id = node_id;
+    p_sched->sched_info.time = UI32_GET_LOW(lwb_context.ui32_time);
+
+    n_free_slots = (uint8_t)(random_rand() % 2);
+
+    if (lwb_context.n_stream_acks > 0) {
+        n_data_slots++;
+        curr_sched_streams[n_curr_streams++] = NULL; // we set current stream to NULL
     }
 
-    while ((ui16_n_streams != 0) &&
-           (ui8_n_slots_assigned < ui8_n_total_slots - ui8_n_free_slots)) {
+    // First we consider about all streams
+    n_data_slots += n_streams;
 
-        for (prev_stream = list_head(streams_list);
-             prev_stream != NULL;
-             prev_stream = prev_stream->next) {
-            p_sched->ui16arr_slots[ui8_n_slots_assigned++] = prev_stream->ui16_node_id;
+    // Find number of full rounds needed
+    n_required_slots = n_data_slots + n_free_slots;
+    n_full_rounds = n_required_slots / LWB_MAX_SLOTS_UNIT_TIME;
+
+    if (n_full_rounds == 0) {
+        // We need only one round
+        p_sched->sched_info.round_period = 1;
+    } else {
+        p_sched->sched_info.round_period = n_full_rounds;
+        if (n_required_slots % LWB_MAX_SLOTS_UNIT_TIME != 0) {
+            // We need one round additionally for remaining slots
+            p_sched->sched_info.round_period++;
         }
     }
 
-    SET_N_FREE_SLOTS(p_sched->sched_info.ui8_n_slots, ui8_n_free_slots);
-    SET_N_DATA_SLOTS(p_sched->sched_info.ui8_n_slots, ui8_n_slots_assigned);
+    // Calculating how many data slots we have
+    n_data_slots = (p_sched->sched_info.round_period * LWB_MAX_SLOTS_UNIT_TIME) - n_free_slots;
+
+    if (lwb_context.n_stream_acks > 0) {
+        // We have stream acknowledgments to be sent.
+        p_sched->slots[n_data_slots_assigned++] = 0;
+    }
+
+    while ((n_streams != 0) && (n_data_slots_assigned < n_data_slots)) {
+        // First we assign one slot for each stream
+        for (crr_stream = list_head(streams_list);
+                        crr_stream != NULL;
+                        crr_stream = crr_stream->next) {
+            p_sched->slots[n_data_slots_assigned++] = crr_stream->node_id;
+            crr_stream->n_slots_allocated++;
+            curr_sched_streams[n_curr_streams++] = crr_stream;
+
+        }
+    }
+
+    // Set number of free and assigned data slots
+    SET_N_FREE_SLOTS(p_sched->sched_info.n_slots, n_free_slots);
+    SET_N_DATA_SLOTS(p_sched->sched_info.n_slots, n_data_slots_assigned);
 
 }
 
 //--------------------------------------------------------------------------------------------------
 void lwb_sched_process_stream_req(uint16_t ui16_id, lwb_stream_req_t *p_req) {
 
-    switch (GET_STREAM_TYPE(p_req->ui8_req_type)) {
+    switch (GET_STREAM_TYPE(p_req->req_type)) {
         case LWB_STREAM_TYPE_ADD:
             add_stream(ui16_id, p_req);
             break;
@@ -182,11 +205,26 @@ void lwb_sched_process_stream_req(uint16_t ui16_id, lwb_stream_req_t *p_req) {
             del_stream(ui16_id, p_req);
             break;
         case LWB_STREAM_TYPE_MOD:
-            add_stream(ui16_id, p_req);
             del_stream(ui16_id, p_req);
+            add_stream(ui16_id, p_req);
             break;
         default:
             break;
     }
 
+}
+
+//--------------------------------------------------------------------------------------------------
+
+void lwb_sched_update_data_slot_usage(uint8_t slot_index, uint8_t used) {
+
+    if (slot_index > 0 && slot_index < n_curr_streams && curr_sched_streams[slot_index]) {
+
+        if (used) {
+            curr_sched_streams[slot_index]->n_slots_used++;
+            curr_sched_streams[slot_index]->n_cons_missed = 0;
+        } else {
+            curr_sched_streams[slot_index]->n_cons_missed++;
+        }
+    }
 }
