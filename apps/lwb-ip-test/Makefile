@@ -1,4 +1,4 @@
-CONTIKI_PROJECT = lwb-ip-test
+CONTIKI_PROJECT = tcp-client-server
 all: $(CONTIKI_PROJECT)
 
 PROJECT_SOURCEFILES += lwb-print.c deployment.c
