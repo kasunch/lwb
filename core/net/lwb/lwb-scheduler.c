@@ -23,7 +23,7 @@ LIST(streams_list);
 static uint16_t n_streams = 0;
 
 lwb_stream_info_t* curr_sched_streams[LWB_SCHED_MAX_SLOTS];  ///< Pointer to the lwb_stream_info_t
-uint8_t n_curr_streams;                                ///< Number of streams
+uint8_t n_curr_streams;                                      ///< Number of streams
 
 //--------------------------------------------------------------------------------------------------
 static void inline add_stream(uint16_t ui16_node_id, lwb_stream_req_t *p_req) {
@@ -118,23 +118,23 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
     uint8_t n_full_rounds;
 
     // Recycle unused data slots based on activity
-    for (crr_stream = list_head(streams_list); crr_stream != NULL;) {
-
-        // Reset counters before computing schedule
-        crr_stream->n_slots_allocated = 0;
-        crr_stream->n_slots_used = 0;
-
-        if (crr_stream->n_cons_missed > LWB_SCHED_N_CONS_MISSED_MAX) {
-
-            lwb_stream_info_t *to_be_removed = crr_stream;
-            crr_stream = crr_stream->next;
-            list_remove(streams_list, to_be_removed);
-            n_streams--;
-
-        } else {
-            crr_stream = crr_stream->next;
-        }
-    }
+//    for (crr_stream = list_head(streams_list); crr_stream != NULL;) {
+//
+//        // Reset counters before computing schedule
+//        crr_stream->n_slots_allocated = 0;
+//        crr_stream->n_slots_used = 0;
+//
+//        if (crr_stream->n_cons_missed > LWB_SCHED_N_CONS_MISSED_MAX) {
+//
+//            lwb_stream_info_t *to_be_removed = crr_stream;
+//            crr_stream = crr_stream->next;
+//            list_remove(streams_list, to_be_removed);
+//            n_streams--;
+//
+//        } else {
+//            crr_stream = crr_stream->next;
+//        }
+//    }
 
     // reset current streams
     memset(curr_sched_streams, 0, sizeof(lwb_stream_info_t*) * LWB_SCHED_MAX_SLOTS);
