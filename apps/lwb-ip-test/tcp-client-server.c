@@ -23,7 +23,7 @@
 #define LWB_HOST_NODE_ID    15
 #define TCP_PORT            20222
 
-#define TCP_CLIENT_CONNECT_DELAY    2
+#define TCP_CLIENT_CONNECT_DELAY    60
 
 enum {
   ECHO_MSG_TYPE_REQ = 1,
@@ -35,11 +35,11 @@ typedef struct __attribute__ ((__packed__)) echo_msg {
   uint8_t ui8_counter_l;
   uint8_t ui8_counter_h;
   uint8_t ui8_pad;
-  uint8_t dummy[36];
+  uint8_t dummy[26];
 } echo_msg_t;
 
 typedef struct tcpstats {
-  uint32_t seq;
+  uint16_t seq;
   uint32_t lat;
   uint32_t on;
   uint32_t tot;  
@@ -50,12 +50,11 @@ typedef struct tcpstats {
 tcpstats_t tcpstats_info[TCPSTATS_ELEMENTS];
 uint16_t tcpstats_cnt;
 
-
 static uip_ipaddr_t global_ip_addr;
-uint16_t ui16_counter = 0;
-echo_msg_t echo_msg_buf;
+static uint16_t ui16_counter = 0;
+static echo_msg_t echo_msg_buf;
 struct psock p_socket;
-rtimer_clock_t t_start = 0, t_end = 0; 
+clock_time_t t_start = 0, t_end = 0; 
 uint32_t en_on_start = 0, en_on_end = 0;
 uint32_t en_tot_start = 0, en_tot_end = 0;
 
@@ -83,29 +82,31 @@ void on_data(uint8_t *p_data, uint8_t ui8_len, uint16_t ui16_from_id) {
     tcpip_input();
 }
 
-extern uint16_t slots_used;
 void on_schedule_end(void) {
 
     uint32_t en_on = 0;
     uint32_t en_tot = 0;
-    uint32_t dcycle = 0;
+    //uint32_t dcycle = 0;
     uint8_t i = 0;
 
+    printf("P|");
     for(; i < tcpstats_cnt; i++) {
-
         en_on += tcpstats_info[i].on;
         en_tot += tcpstats_info[i].tot;
-
-        printf("seq %lu, lat %lu ms\n", tcpstats_info[i].seq, (tcpstats_info[i].lat/1000));
+        printf("%u-%lu ", tcpstats_info[i].seq, (tcpstats_info[i].tot * 1000 /RTIMER_SECOND));
     }
+    printf("\n");
 
-    dcycle = en_on * 1e4 / en_tot;
-    printf("dcycle %lu.%lu\n", dcycle / 100, dcycle % 100);
+    //dcycle = en_on * 1e4 / en_tot;
+    //printf("%lu.%lu, ", dcycle / 100, dcycle % 100);
 
     tcpstats_cnt = 0;
 
+    if(node_id == TCP_SERVER_NODE_ID || node_id == TCP_CLIENT_NODE_ID) {
+        printf("T|%u %u\n", UIP_STAT(uip_stat.tcp.rexmit), UIP_STAT(uip_stat.tcp.drop));
+    }
 
-//    lwb_print_stats();
+    lwb_print_stats();
 }
 
 static PT_THREAD(server_handler())
@@ -115,12 +116,6 @@ static PT_THREAD(server_handler())
     PSOCK_WAIT_UNTIL(&p_socket, PSOCK_NEWDATA(&p_socket));
     PSOCK_READBUF_LEN(&p_socket, sizeof(echo_msg_t));
 
-//    PRINTF("server received req\n");
-//    PRINT6ADDR(&UIP_IP_BUF->destipaddr);
-//    PRINTF(", src : ");
-//    PRINT6ADDR(&UIP_IP_BUF->srcipaddr);
-//    PRINTF("\n");
-
     if (echo_msg_buf.ui8_type == ECHO_MSG_TYPE_REQ) {
 
         ui16_counter = 0;
@@ -129,7 +124,6 @@ static PT_THREAD(server_handler())
             echo_msg_buf.ui8_type = ECHO_MSG_TYPE_RES;
             echo_msg_buf.ui8_counter_l = (uint8_t)(ui16_counter & 0xFF);
             echo_msg_buf.ui8_counter_h = (uint8_t)(ui16_counter >> 8);
-            printf("sending %u\n", ui16_counter);
             PSOCK_SEND(&p_socket, (uint8_t *) &echo_msg_buf, sizeof(echo_msg_t));
             ui16_counter++;
         }
@@ -149,19 +143,19 @@ static PT_THREAD(client_handler())
 
     while (1) {
 
-        t_start = RTIMER_NOW();
+        t_start = clock_time();
         en_on_start = energest_type_time(ENERGEST_TYPE_LISTEN) + energest_type_time(ENERGEST_TYPE_TRANSMIT);
         en_tot_start = energest_type_time(ENERGEST_TYPE_CPU) + energest_type_time(ENERGEST_TYPE_LPM);
 
         PSOCK_WAIT_UNTIL(&p_socket, PSOCK_NEWDATA(&p_socket));
         PSOCK_READBUF_LEN(&p_socket, sizeof(echo_msg_t));
      
-        t_end = RTIMER_NOW(); 
+        t_end = clock_time(); 
         en_on_end = energest_type_time(ENERGEST_TYPE_LISTEN) + energest_type_time(ENERGEST_TYPE_TRANSMIT);
         en_tot_end = energest_type_time(ENERGEST_TYPE_CPU) + energest_type_time(ENERGEST_TYPE_LPM);
 
         uint16_t c = (uint16_t)echo_msg_buf.ui8_counter_l + ((uint16_t)(echo_msg_buf.ui8_counter_h) << 8);
-        uint32_t t_diff = (uint32_t)(t_end - t_start) * 1e6 / RTIMER_SECOND; // in microseconds
+        uint32_t t_diff = (uint32_t)(t_end - t_start) * 1e6 / CLOCK_SECOND; // in microseconds
 
         if (tcpstats_cnt < TCPSTATS_ELEMENTS) {
             tcpstats_info[tcpstats_cnt].seq = c;
@@ -186,9 +180,9 @@ PROCESS_THREAD(tcp_server_process, ev, data)
     
     PROCESS_BEGIN();
 
-    cc2420_set_tx_power(TX_POWER);
+    cc2420_set_tx_power(RF_POWER);
 
-    printf("channel %d, tx power %d\n", RF_CHANNEL, TX_POWER);
+    printf("channel %d, tx power %d\n", RF_CHANNEL, RF_POWER);
 
 
     tcpip_set_outputfunc(&lwb_tcpip_input);
