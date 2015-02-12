@@ -651,7 +651,8 @@ tcpip_ipv6_output(void)
 //        PRINTF("tcpip_ipv6_output: nbr cache entry stale moving to delay\n");
 //      }
 
-      tcpip_output(&uip_lladdr);
+      // It is always multicast with LWB
+      tcpip_output(NULL);
 
 //#if UIP_CONF_IPV6_QUEUE_PKT
 //      /*
