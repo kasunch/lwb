@@ -8,10 +8,16 @@
 #include "uip6/uip-ds6.h"
 #include "uip6/psock.h"
 
+#if CONTIKI_TARGET_SKY
+#include "dev/ds2411.h"
+#endif // CONTIKI_TARGET_SKY
+
 #include "deployment.h" 
 
 #define DEBUG DEBUG_PRINT
 #include "uip6/uip-debug.h"
+
+#include "sicslowpan.h"
 
 #include "lwb.h"
 #include "lwb-print.h"
@@ -23,7 +29,7 @@
 #define LWB_HOST_NODE_ID    15
 #define TCP_PORT            20222
 
-#define TCP_CLIENT_CONNECT_DELAY    60
+#define TCP_CLIENT_CONNECT_DELAY    10
 
 enum {
   ECHO_MSG_TYPE_REQ = 1,
@@ -69,17 +75,25 @@ void send_stream_req() {
     }
 }
 
-uint8_t lwb_tcpip_input(const uip_lladdr_t *a) {
+// Commented for 6LoWPAN integration
+//uint8_t lwb_tcpip_input(const uip_lladdr_t *a) {
+//    send_stream_req();
+//    lwb_queue_packet((uint8_t *)UIP_IP_BUF, uip_len, 0);
+//    return 1;
+//}
+
+uint8_t lwb_tcpip_input(uint8_t *data, uint8_t len) {
     send_stream_req();
-    lwb_queue_packet((uint8_t *)UIP_IP_BUF, uip_len, 0);
+    lwb_queue_packet(data, len, 0);
     return 1; 
 }
 
-
 void on_data(uint8_t *p_data, uint8_t ui8_len, uint16_t ui16_from_id) {
-    memcpy((uint8_t *)UIP_IP_BUF, p_data, ui8_len);
-    uip_len = ui8_len;
-    tcpip_input();
+    // Commented for 6LoWPAN integration
+    //memcpy((uint8_t *)UIP_IP_BUF, p_data, ui8_len);
+    //uip_len = ui8_len;
+    //tcpip_input();
+    sicslowpan_input(p_data, ui8_len);
 }
 
 void on_schedule_end(void) {
@@ -180,12 +194,21 @@ PROCESS_THREAD(tcp_server_process, ev, data)
     
     PROCESS_BEGIN();
 
+#if CONTIKI_TARGET_SKY
     cc2420_set_tx_power(RF_POWER);
-
     printf("channel %d, tx power %d\n", RF_CHANNEL, RF_POWER);
+#endif // CONTIKI_TARGET_SKY
 
+#if UIP_CONF_IPV6 && CONTIKI_TARGET_SKY
+    memcpy(&uip_lladdr.addr, ds2411_id, sizeof(uip_lladdr.addr));
+#endif // UIP_CONF_IPV6
 
-    tcpip_set_outputfunc(&lwb_tcpip_input);
+    // Commented for 6LoWPAN integration
+    //tcpip_set_outputfunc(&lwb_tcpip_input);
+
+    sicslowpan_init();
+    sicslowpan_set_outputfunc(lwb_tcpip_input);
+
     process_start(&tcpip_process, NULL);
 
     set_ipaddr_from_id(&global_ip_addr, node_id);   
