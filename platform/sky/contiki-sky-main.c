@@ -40,6 +40,7 @@
 #include "dev/uart1.h"
 #include "dev/watchdog.h"
 #include "dev/xmem.h"
+#include "dev/ds2411.h"
 #include "lib/random.h"
 
 #include "node-id.h"
@@ -80,6 +81,12 @@ main(int argc, char **argv)
   uart1_init(BAUD2UBR(115200)); /* Must come before first printf */
 
   leds_on(LEDS_GREEN);
+
+  ds2411_init();
+  /* XXX hack: Fix it so that the 802.15.4 MAC address is compatible
+     with an Ethernet MAC address - byte 0 (byte 2 in the DS ID)
+     cannot be odd. */
+  ds2411_id[2] &= 0xfe;
 
   leds_on(LEDS_BLUE);
   xmem_init();
