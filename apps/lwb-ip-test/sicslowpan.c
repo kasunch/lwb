@@ -194,8 +194,9 @@ void uip_log(char *msg);
 
 uint8_t packet_buf[PACKET_BUF_SIZE];
 uint8_t packet_buf_len = 0;
+
 uip_lladdr_t all_zero_lladdr;
-void (* sicslowpan_outputfunc)(uint8_t *data, uint8_t len);
+uint8_t (* sicslowpan_outputfunc)(uint8_t *data, uint8_t len);
 
 //#ifdef SICSLOWPAN_NH_COMPRESSOR
 ///** A pointer to the additional compressor */
@@ -266,7 +267,8 @@ static uint16_t my_tag;
 static uint16_t reass_tag;
 
 /** When reassembling, the source address of the fragments being merged */
-linkaddr_t frag_sender;
+//linkaddr_t frag_sender;
+uint16_t frag_sender;
 
 /** Reassembly %process %timer. */
 static struct timer reass_timer;
@@ -1496,7 +1498,7 @@ output(const uip_lladdr_t *localdest)
 
   if((int)uip_len - (int)uncomp_hdr_len > max_payload - (int)packetbuf_hdr_len) {
 #if SICSLOWPAN_CONF_FRAG
-    struct queuebuf *q;
+//    struct queuebuf *q;
     /*
      * The outbound IPv6 packet is too large to fit into a single 15.4
      * packet, so we fragment it into multiple packets and send them.
@@ -1504,13 +1506,13 @@ output(const uip_lladdr_t *localdest)
      * IPv6/HC1/HC06/HC_UDP dispatchs/headers.
      * The following fragments contain only the fragn dispatch.
      */
-    int estimated_fragments = ((int)uip_len) / ((int)MAC_MAX_PAYLOAD - SICSLOWPAN_FRAGN_HDR_LEN) + 1;
-    int freebuf = queuebuf_numfree() - 1;
-    PRINTFO("uip_len: %d, fragments: %d, free bufs: %d\n", uip_len, estimated_fragments, freebuf);
-    if(freebuf < estimated_fragments) {
-      PRINTFO("Dropping packet, not enough free bufs\n");
-      return 0;
-    }
+//    int estimated_fragments = ((int)uip_len) / ((int)MAC_MAX_PAYLOAD - SICSLOWPAN_FRAGN_HDR_LEN) + 1;
+//    int freebuf = queuebuf_numfree() - 1;
+//    PRINTFO("uip_len: %d, fragments: %d, free bufs: %d\n", uip_len, estimated_fragments, freebuf);
+//    if(freebuf < estimated_fragments) {
+//      PRINTFO("Dropping packet, not enough free bufs\n");
+//      return 0;
+//    }
 
     PRINTFO("Fragmentation sending packet len %d\n", uip_len);
 
@@ -1539,15 +1541,15 @@ output(const uip_lladdr_t *localdest)
     memcpy(packetbuf_ptr + packetbuf_hdr_len,
            (uint8_t *)UIP_IP_BUF + uncomp_hdr_len, packetbuf_payload_len);
     packetbuf_set_datalen(packetbuf_payload_len + packetbuf_hdr_len);
-    q = queuebuf_new_from_packetbuf();
-    if(q == NULL) {
-      PRINTFO("could not allocate queuebuf for first fragment, dropping packet\n");
-      return 0;
-    }
+//    q = queuebuf_new_from_packetbuf();
+//    if(q == NULL) {
+//      PRINTFO("could not allocate queuebuf for first fragment, dropping packet\n");
+//      return 0;
+//    }
     send_packet(&dest);
-    queuebuf_to_packetbuf(q);
-    queuebuf_free(q);
-    q = NULL;
+//    queuebuf_to_packetbuf(q);
+//    queuebuf_free(q);
+//    q = NULL;
 
 //    /* Check tx result. */
 //    if((last_tx_status == MAC_TX_COLLISION) ||
@@ -1585,15 +1587,15 @@ output(const uip_lladdr_t *localdest)
       memcpy(packetbuf_ptr + packetbuf_hdr_len,
              (uint8_t *)UIP_IP_BUF + processed_ip_out_len, packetbuf_payload_len);
       packetbuf_set_datalen(packetbuf_payload_len + packetbuf_hdr_len);
-      q = queuebuf_new_from_packetbuf();
-      if(q == NULL) {
-        PRINTFO("could not allocate queuebuf, dropping fragment\n");
-        return 0;
-      }
+//      q = queuebuf_new_from_packetbuf();
+//      if(q == NULL) {
+//        PRINTFO("could not allocate queuebuf, dropping fragment\n");
+//        return 0;
+//      }
       send_packet(&dest);
-      queuebuf_to_packetbuf(q);
-      queuebuf_free(q);
-      q = NULL;
+//      queuebuf_to_packetbuf(q);
+//      queuebuf_free(q);
+//      q = NULL;
       processed_ip_out_len += packetbuf_payload_len;
 
 //      /* Check tx result. */
@@ -1636,7 +1638,8 @@ output(const uip_lladdr_t *localdest)
  * (it is a SHALL in the RFC 4944 and should never happen)
  */
 static void
-input(void)
+//input(void)
+input(uint16_t node_id)
 {
   /* size of the IP packet (read from fragment) */
   uint16_t frag_size = 0;
@@ -1727,7 +1730,8 @@ input(void)
     sicslowpan_len = 0;
     processed_ip_in_len = 0;
   } else if(processed_ip_in_len > 0 && first_fragment
-      && !linkaddr_cmp(&frag_sender, packetbuf_addr(PACKETBUF_ADDR_SENDER))) {
+      //&& !linkaddr_cmp(&frag_sender, packetbuf_addr(PACKETBUF_ADDR_SENDER))) {
+      && frag_sender != node_id) {
     sicslowpan_len = 0;
     processed_ip_in_len = 0;
   }
@@ -1739,7 +1743,8 @@ input(void)
     if((frag_size > 0 &&
         (frag_size != sicslowpan_len ||
          reass_tag  != frag_tag ||
-         !linkaddr_cmp(&frag_sender, packetbuf_addr(PACKETBUF_ADDR_SENDER))))  ||
+         // !linkaddr_cmp(&frag_sender, packetbuf_addr(PACKETBUF_ADDR_SENDER))))  ||
+         frag_sender != node_id)) ||
        frag_size == 0) {
       /*
        * the packet is a fragment that does not belong to the packet
@@ -1765,7 +1770,8 @@ input(void)
       timer_set(&reass_timer, SICSLOWPAN_REASS_MAXAGE * CLOCK_SECOND);
       PRINTFI("sicslowpan input: INIT FRAGMENTATION (len %d, tag %d)\n",
              sicslowpan_len, reass_tag);
-      linkaddr_copy(&frag_sender, packetbuf_addr(PACKETBUF_ADDR_SENDER));
+      //linkaddr_copy(&frag_sender, packetbuf_addr(PACKETBUF_ADDR_SENDER));
+      frag_sender = node_id;
     }
   }
 
@@ -1889,6 +1895,17 @@ input(void)
     }
 #endif
 
+//    {
+//      uint16_t ndx;
+//      printf("uip_len %u:", uip_len);
+//      for (ndx = 0; ndx < 4; ndx++) {
+//        uint8_t data = ((uint8_t *)(UIP_TCP_BUF) + UIP_TCPH_LEN)[ndx];
+//        printf("%02x", data);
+//      }
+//      printf("\n");
+//    }
+
+
 //    /* if callback is set then set attributes and call */
 //    if(callback) {
 //      set_packet_attrs();
@@ -1903,14 +1920,14 @@ input(void)
 /** @} */
 
 void
-sicslowpan_input(uint8_t *data, uint8_t len) {
+sicslowpan_input(uint8_t *data, uint8_t len, uint16_t node_id) {
     memcpy(packetbuf_dataptr(), data, len);
     packetbuf_set_datalen(len);
-    input();
+    input(node_id);
 }
 
 void
-sicslowpan_set_outputfunc(void (*f)(uint8_t *, uint8_t))
+sicslowpan_set_outputfunc(uint8_t (*f)(uint8_t *, uint8_t))
 {
     sicslowpan_outputfunc = f;
 }

@@ -323,9 +323,9 @@ struct sicslowpan_addr_context {
 //int sicslowpan_get_last_rssi(void);
 //
 //extern const struct network_driver sicslowpan_driver;
-
-void sicslowpan_input(uint8_t *data, uint8_t len);
-void sicslowpan_set_outputfunc(void (*f)(uint8_t *, uint8_t));
+void sicslowpan_init(void);
+void sicslowpan_input(uint8_t *data, uint8_t len, uint16_t node_id);
+void sicslowpan_set_outputfunc(uint8_t (*f)(uint8_t *, uint8_t));
 
 #endif /* SICSLOWPAN_H_ */
 /** @} */
