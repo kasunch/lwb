@@ -19,7 +19,7 @@ typedef unsigned short uip_stats_t;
 ///< Maximum number of listening TCP ports.
 #define UIP_CONF_MAX_LISTENPORTS 10
 ///< uIP buffer size.
-#define UIP_CONF_BUFFER_SIZE     240
+#define UIP_CONF_BUFFER_SIZE     800
 ///< CPU byte order.
 #define UIP_CONF_BYTE_ORDER      LITTLE_ENDIAN
 ///< Logging on or off
