@@ -67,6 +67,7 @@ typedef struct __attribute__ ((__packed__)) data_header {
     uint16_t from_id;  ///< From node ID
     uint16_t to_id;    ///< To node ID
     uint8_t  data_len;  ///< Data options
+    uint8_t  in_queue;  ///< Number of packets in queue that are ready to be sent
     uint8_t  options;   ///< Data options
 } data_header_t;
 

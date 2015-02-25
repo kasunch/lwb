@@ -96,6 +96,9 @@ static void prepare_data_packet() {
     if (p_buf_item && (LWB_MAX_TXRX_BUF_LEN > p_buf_item->buf.header.data_len + sizeof(data_header_t))) {
         // We have enough space on the buffer to send data. This is just a sanity check.
 
+        // Set number of packets in the buffer that are ready to be transmitted
+        p_buf_item->buf.header.in_queue = ui8_tx_buf_q_size - 1;
+
         // First, we copy the data. The data header will be copied later at the end.
         // We may need to update options of the data header if we have stream requests to be sent.
         memcpy(lwb_context.ui8arr_txrx_buf + sizeof(data_header_t),
@@ -269,7 +272,7 @@ static void prepare_stream_reqs() {
 }
 
 //--------------------------------------------------------------------------------------------------
-static void process_data_packet() {
+static void process_data_packet(uint8_t slot_idx) {
 
     // Just a sanity check
     if (lwb_context.txrx_buf_len < sizeof(data_header_t)) {
@@ -568,7 +571,7 @@ PT_THREAD(lwb_g_rr_host(struct rtimer *t, lwb_context_t *p_context)) {
 #if LWB_HSLP
                         lwb_g_rr_hslp_send_app_data();
 #else
-                        process_data_packet();
+                        process_data_packet(ui8_slot_idx);
 #endif // LWB_HSLP
 
                     } else {
@@ -757,7 +760,7 @@ PT_THREAD(lwb_g_rr_source(struct rtimer *t, lwb_context_t *p_context)) {
                         process_stream_acks();
                     } else if (ui8_g_header == LWB_PKT_TYPE_DATA) {
                         // Data packet
-                        process_data_packet();
+                        process_data_packet(ui8_slot_idx);
                     } else {
                         // Unknown packets
                         /// @todo add stats about unknown packets.
