@@ -11,6 +11,7 @@
 #include "lwb-scheduler.h"
 #include "lwb-macros.h"
 
+#define T_ROUND_PERIOD_MIN  1
 
 extern uint16_t node_id;
 
@@ -110,76 +111,50 @@ void lwb_sched_init(void) {
 //--------------------------------------------------------------------------------------------------
 void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
 
-    lwb_stream_info_t *crr_stream;
-    uint8_t n_data_slots_assigned = 0;
     uint8_t n_free_slots;
-    uint8_t n_data_slots = 0;
-    uint8_t n_required_slots = 0;
-    uint8_t n_full_rounds;
+    uint8_t n_possible_data_slots;
+    uint8_t n_data_slots_assigned = 0;
+    lwb_stream_info_t *crr_stream;
 
     // Recycle unused data slots based on activity
-//    for (crr_stream = list_head(streams_list); crr_stream != NULL;) {
-//
-//        // Reset counters before computing schedule
-//        crr_stream->n_slots_allocated = 0;
-//        crr_stream->n_slots_used = 0;
-//
-//        if (crr_stream->n_cons_missed > LWB_SCHED_N_CONS_MISSED_MAX) {
-//
-//            lwb_stream_info_t *to_be_removed = crr_stream;
-//            crr_stream = crr_stream->next;
-//            list_remove(streams_list, to_be_removed);
-//            n_streams--;
-//
-//        } else {
-//            crr_stream = crr_stream->next;
-//        }
-//    }
+    for (crr_stream = list_head(streams_list); crr_stream != NULL;) {
+
+        LWB_STATS_SCHED(ui16_n_unused_slots) += crr_stream->n_slots_allocated - crr_stream->n_slots_used;
+        // Reset counters before computing schedule
+        crr_stream->n_slots_allocated = 0;
+        crr_stream->n_slots_used = 0;
+
+        if (crr_stream->n_cons_missed > LWB_SCHED_N_CONS_MISSED_MAX) {
+
+            lwb_stream_info_t *to_be_removed = crr_stream;
+            crr_stream = crr_stream->next;
+            list_remove(streams_list, to_be_removed);
+            n_streams--;
+
+        } else {
+            crr_stream = crr_stream->next;
+        }
+    }
+
 
     // reset current streams
     memset(curr_sched_streams, 0, sizeof(lwb_stream_info_t*) * LWB_SCHED_MAX_SLOTS);
     n_curr_streams = 0;
 
-    p_sched->sched_info.host_id = node_id;
-    p_sched->sched_info.time = UI32_GET_LOW(lwb_context.ui32_time);
-
     n_free_slots = (uint8_t)(random_rand() % 2);
 
+    n_possible_data_slots = (T_ROUND_PERIOD_MIN * RTIMER_SECOND -
+                                (T_SYNC_ON + n_free_slots * T_FREE_ON + T_COMP)) / (T_GAP + T_RR_ON);
+
     if (lwb_context.n_stream_acks > 0) {
-        n_data_slots++;
         curr_sched_streams[n_curr_streams++] = NULL; // we set current stream to NULL
-    }
-
-    // First we consider about all streams
-    n_data_slots += n_streams;
-
-    // Find number of full rounds needed
-    n_required_slots = n_data_slots + n_free_slots;
-    n_full_rounds = n_required_slots / LWB_MAX_SLOTS_UNIT_TIME;
-
-    if (n_full_rounds == 0) {
-        // We need only one round
-        p_sched->sched_info.round_period = 1;
-    } else {
-        p_sched->sched_info.round_period = n_full_rounds;
-        if (n_required_slots % LWB_MAX_SLOTS_UNIT_TIME != 0) {
-            // We need one round additionally for remaining slots
-            p_sched->sched_info.round_period++;
-        }
-    }
-
-    // Calculating how many data slots we have
-    n_data_slots = (p_sched->sched_info.round_period * LWB_MAX_SLOTS_UNIT_TIME) - n_free_slots;
-
-    if (lwb_context.n_stream_acks > 0) {
-        // We have stream acknowledgments to be sent.
         p_sched->slots[n_data_slots_assigned++] = 0;
     }
 
-    while ((n_streams != 0) && (n_data_slots_assigned < n_data_slots)) {
-        // First we assign one slot for each stream
+
+    while (n_streams != 0 && n_data_slots_assigned < n_possible_data_slots) {
         for (crr_stream = list_head(streams_list);
-                        crr_stream != NULL;
+                        crr_stream != NULL && n_data_slots_assigned < n_possible_data_slots;
                         crr_stream = crr_stream->next) {
             p_sched->slots[n_data_slots_assigned++] = crr_stream->node_id;
             crr_stream->n_slots_allocated++;
@@ -191,6 +166,10 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
     // Set number of free and assigned data slots
     SET_N_FREE_SLOTS(p_sched->sched_info.n_slots, n_free_slots);
     SET_N_DATA_SLOTS(p_sched->sched_info.n_slots, n_data_slots_assigned);
+
+    p_sched->sched_info.host_id = node_id;
+    p_sched->sched_info.time = UI32_GET_LOW(lwb_context.ui32_time);
+    p_sched->sched_info.round_period = T_ROUND_PERIOD_MIN;
 
 }
 
