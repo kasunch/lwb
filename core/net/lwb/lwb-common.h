@@ -129,6 +129,7 @@ typedef struct lwb_sched_stats {
     uint16_t ui16_n_no_space;       ///< Number of streams that are unable to add due to space unavailability
     uint16_t ui16_n_modified;       ///< Number of streams modified
     uint16_t ui16_n_duplicates;     ///< Number of duplicated stream requests
+    uint16_t ui16_n_unused_slots;
 } lwb_sched_stats_t;
 
 /// @brief Glossy synchronization related statistics
