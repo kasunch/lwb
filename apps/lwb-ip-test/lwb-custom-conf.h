@@ -3,4 +3,6 @@
 
 #define LWB_CONF_T_GAP  (RTIMER_SECOND / 250) // 4 ms
 
+#define LWB_CONF_MAX_DATA_BUF_ELEMENTS 8
+
 #endif // LWB_CUSTOM_CONF_H_
