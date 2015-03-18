@@ -39,10 +39,10 @@
 //#define UIP_CONF_RECEIVE_WINDOW     60
 //#endif
 
-#define RF_POWER                    17
+//#define RF_POWER                    17
 
-#undef RF_CHANNEL
-#define RF_CHANNEL	26
+//#undef RF_CHANNEL
+//#define RF_CHANNEL	26
 
 #define SICSLOWPAN_CONF_COMPRESSION_IPV6        0
 #define SICSLOWPAN_CONF_COMPRESSION_HC1         1
@@ -51,7 +51,7 @@
 #undef SICSLOWPAN_CONF_COMPRESSION
 #define SICSLOWPAN_CONF_COMPRESSION             SICSLOWPAN_CONF_COMPRESSION_HC06
 
-#define SICSLOWPAN_CONF_ADDR_CONTEXT_0
+#define SICSLOWPAN_CONF_ADDR_CONTEXT_0          {addr_contexts[0].prefix[0]=0xaa;addr_contexts[0].prefix[1]=0xaa;}
 #define SICSLOWPAN_CONF_FRAG                    1
 #define SICSLOWPAN_CONF_MAC_MAX_PAYLOAD         (127 - 10)
 
