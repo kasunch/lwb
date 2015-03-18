@@ -654,9 +654,12 @@ compress_hdr_hc06(uip_lladdr_t *link_destaddr)
     iphc1 |= SICSLOWPAN_IPHC_CID | SICSLOWPAN_IPHC_SAC;
     PACKETBUF_IPHC_BUF[2] |= context->number << 4;
     /* compession compare with this nodes address (source) */
-
+//    iphc1 |= compress_addr_64(SICSLOWPAN_IPHC_SAM_BIT,
+//                              &UIP_IP_BUF->srcipaddr, &uip_lladdr);
+    // TODO: In LWB, we do not use MAC address based compression since MAC address is not carried in
+    // packet
     iphc1 |= compress_addr_64(SICSLOWPAN_IPHC_SAM_BIT,
-                              &UIP_IP_BUF->srcipaddr, &uip_lladdr);
+                              &UIP_IP_BUF->srcipaddr, (uip_lladdr_t *)link_destaddr);
     /* No context found for this address */
   } else if(uip_is_addr_link_local(&UIP_IP_BUF->srcipaddr) &&
 	    UIP_IP_BUF->destipaddr.u16[1] == 0 &&
@@ -1496,6 +1499,11 @@ output(const uip_lladdr_t *localdest)
 //  max_payload = MAC_MAX_PAYLOAD - framer_hdrlen - NETSTACK_LLSEC.get_overhead();
   max_payload = MAC_MAX_PAYLOAD;
 
+  //uint16_t pkt_len =  uip_len; 					// TODO: LWB debugging
+  //uint16_t uncmp_hdr_ln = uncomp_hdr_len;			// TODO: LWB debugging
+  //uint16_t pktbuf_hdr_ln = packetbuf_hdr_len;		// TODO: LWB debugging
+  //uint8_t frgs = 0;								// TODO: LWB debugging
+
   if((int)uip_len - (int)uncomp_hdr_len > max_payload - (int)packetbuf_hdr_len) {
 #if SICSLOWPAN_CONF_FRAG
 //    struct queuebuf *q;
@@ -1546,6 +1554,7 @@ output(const uip_lladdr_t *localdest)
 //      PRINTFO("could not allocate queuebuf for first fragment, dropping packet\n");
 //      return 0;
 //    }
+    //frgs++; // TODO: LWB debugging
     send_packet(&dest);
 //    queuebuf_to_packetbuf(q);
 //    queuebuf_free(q);
@@ -1592,6 +1601,7 @@ output(const uip_lladdr_t *localdest)
 //        PRINTFO("could not allocate queuebuf, dropping fragment\n");
 //        return 0;
 //      }
+      //frgs++; // TODO: LWB debugging
       send_packet(&dest);
 //      queuebuf_to_packetbuf(q);
 //      queuebuf_free(q);
@@ -1606,6 +1616,7 @@ output(const uip_lladdr_t *localdest)
 //        return 0;
 //      }
     }
+    //printf("%u %u %u %u\n", pkt_len, uncmp_hdr_ln, pktbuf_hdr_ln, frgs); // TODO: LWB debugging
 #else /* SICSLOWPAN_CONF_FRAG */
     PRINTFO("sicslowpan output: Packet too large to be sent without fragmentation support; dropping packet\n");
     return 0;
