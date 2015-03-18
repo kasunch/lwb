@@ -24,8 +24,8 @@ static struct id_addr id_addr_list[] = {
    {13, {UIP_HTONS(0xaaaa), 0, 0, 0, UIP_HTONS(0x212), UIP_HTONS(0x7400), UIP_HTONS(0x13b7), UIP_HTONS(0x762a)}},
    {14, {UIP_HTONS(0xaaaa), 0, 0, 0, UIP_HTONS(0x212), UIP_HTONS(0x7400), UIP_HTONS(0x13b7), UIP_HTONS(0xfd06)}},
    {15, {UIP_HTONS(0xaaaa), 0, 0, 0, UIP_HTONS(0x212), UIP_HTONS(0x7400), UIP_HTONS(0x137d), UIP_HTONS(0x2a0f)}},
-   //{16, {UIP_HTONS(0xaaaa), 0, 0, 0, UIP_HTONS(0x212), UIP_HTONS(0x7400), UIP_HTONS(0x13b7), UIP_HTONS(0x62fc)}},
-   //{17, {UIP_HTONS(0xaaaa), 0, 0, 0, UIP_HTONS(0x212), UIP_HTONS(0x7400), UIP_HTONS(0x13b7), UIP_HTONS(0x7e68)}},
+   {16, {UIP_HTONS(0xaaaa), 0, 0, 0, UIP_HTONS(0x212), UIP_HTONS(0x7400), UIP_HTONS(0x13b7), UIP_HTONS(0x62fc)}},
+   {17, {UIP_HTONS(0xaaaa), 0, 0, 0, UIP_HTONS(0x212), UIP_HTONS(0x7400), UIP_HTONS(0x13b7), UIP_HTONS(0x7e68)}},
     {0, {0, 0, 0, 0, 0, 0 ,0, 0}}
 };
 
