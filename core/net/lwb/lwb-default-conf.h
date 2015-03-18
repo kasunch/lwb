@@ -78,6 +78,13 @@
 #define T_GAP                       (RTIMER_SECOND / 25)           // 40 ms
 #endif
 
+/// @brief Time for schedule computation.
+#ifdef LWB_CONF_T_COMP
+#define T_COMP                       LWB_CONF_T_COMP
+#else
+#define T_COMP                       (RTIMER_SECOND / 20)           // 50 ms
+#endif
+
 /// @brief The gap between schedule and first data slots
 #ifdef LWB_CONF_T_S_R_GAP
 #define T_S_R_GAP                   LWB_CONF_T_S_R_GAP
