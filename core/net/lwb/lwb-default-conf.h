@@ -7,7 +7,7 @@
 /// @defgroup Configurations
 /// @{
 
-/// @brief Maximum size of the TX RX buffer. Node Glossy use 2 bytes for relay counter and header.
+/// @brief Maximum size of the TX RX buffer. Note: Glossy uses 2 bytes for relay counter and header.
 #ifdef LWB_CONF_MAX_TXRX_BUF_LEN
 #define LWB_MAX_TXRX_BUF_LEN        LWB_CONF_MAX_TXRX_BUF_LEN
 #else
