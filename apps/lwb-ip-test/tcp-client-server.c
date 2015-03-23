@@ -24,13 +24,24 @@
 
 #define UIP_IP_BUF   ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
 
-#define TCP_SERVER_NODE_ID  13
+#define TCP_SERVER_NODE_ID  12
 #define TCP_CLIENT_NODE_ID  2
 #define LWB_HOST_NODE_ID    1
 #define TCP_PORT            20222
 
-#define TCP_CLIENT_CONNECT_DELAY    90
-#define TCP_PAYLOAD_LEN             240
+#define TCP_CLIENT_CONNECT_DELAY    60
+
+#define TCP_PAYLOAD_LEN_FRAG_1      70
+#define TCP_PAYLOAD_LEN_FRAG_2      170
+#define TCP_PAYLOAD_LEN_FRAG_3      290
+#define TCP_PAYLOAD_LEN_FRAG_4      400
+
+// Available for application data
+// 127 - (1 (relay counter) + 1 (Glossy header) + 8 (LWB data header) + 20 (compressed IP header) + 20 (TCP))
+// If the total payload is greater than (127 - (1 (relay counter) + 1 (Glossy header) + 8 (LWB data header)),
+// 6LoWPAN fragmentation headers (4 (FAG_1) + 5 (FAG_N)) should also be considered.
+
+#define TCP_PAYLOAD_LEN             TCP_PAYLOAD_LEN_FRAG_1
 
 enum {
   ECHO_MSG_TYPE_REQ = 0xBB,
@@ -49,6 +60,8 @@ typedef struct tcpstats {
   uint16_t seq;
   uint32_t lat;
 } tcpstats_t;
+
+extern lwb_context_t lwb_context;
 
 #define TCPSTATS_ELEMENTS 40
 
@@ -95,7 +108,8 @@ void on_schedule_end(void) {
 
     uint8_t i = 0;
 
-    t_con_now = clock_time();
+    //t_con_now = clock_time();
+    t_con_now = lwb_get_host_time();
     n_packets += tcpstats_cnt;
 
     if (node_id == TCP_CLIENT_NODE_ID && connected) {
@@ -103,25 +117,25 @@ void on_schedule_end(void) {
         for(; i < tcpstats_cnt; i++) {
             printf("%u-%lu ", tcpstats_info[i].seq, (tcpstats_info[i].lat * 1000 / RTIMER_SECOND));
         }
-        printf("|%lu %lu", n_packets, ((t_con_now - t_con_start) / CLOCK_SECOND)); 
+        printf("|%lu %lu %lu", n_packets, (t_con_now - t_con_start), lwb_get_host_time());
         printf("\n");
     }
 
     tcpstats_cnt = 0;
 
     if((node_id == TCP_SERVER_NODE_ID || node_id == TCP_CLIENT_NODE_ID) && connected) {
-        printf("T|%u |%lu\n", UIP_STAT(uip_stat.tcp.rexmit),
-                        ((t_con_now - t_con_start) / CLOCK_SECOND));
+        printf("T|%u |%lu %lu\n", UIP_STAT(uip_stat.tcp.rexmit), (t_con_now - t_con_start), lwb_get_host_time());
     }
 
-    //lwb_print_stats();
+    lwb_print_stats();
 }
 
 static PT_THREAD(server_handler())
 {
     PSOCK_BEGIN(&p_socket);
 
-    t_con_start = clock_time(); // for total time
+    //t_con_start = clock_time(); // for total time
+    t_con_start = lwb_get_host_time();
 
     PSOCK_WAIT_UNTIL(&p_socket, PSOCK_NEWDATA(&p_socket));
     PSOCK_READBUF_LEN(&p_socket, sizeof(echo_msg_t));
@@ -150,7 +164,8 @@ static PT_THREAD(client_handler())
 
     echo_msg_buf.ui8_type = ECHO_MSG_TYPE_REQ;
 
-    t_con_start = clock_time(); // for total time
+    //t_con_start = clock_time(); // for total time
+    t_con_start = lwb_get_host_time();
     // for duty cycle
     en_on_start = energest_type_time(ENERGEST_TYPE_LISTEN) + energest_type_time(ENERGEST_TYPE_TRANSMIT);
     en_tot_start = energest_type_time(ENERGEST_TYPE_CPU) + energest_type_time(ENERGEST_TYPE_LPM);
@@ -182,6 +197,25 @@ static PT_THREAD(client_handler())
     return PT_ENDED;
 }
 
+static void
+print_local_addresses(void)
+{
+    int i;
+    uint8_t state;
+
+    PRINTF("Node %d, Server IPv6 addresses: ", node_id);
+    for(i = 0; i < UIP_DS6_ADDR_NB; i++) {
+        state = uip_ds6_if.addr_list[i].state;
+        if(state == ADDR_TENTATIVE || state == ADDR_PREFERRED) {
+            PRINT6ADDR(&uip_ds6_if.addr_list[i].ipaddr);
+            PRINTF("\n");
+            /* hack to make address "final" */
+            if (state == ADDR_TENTATIVE) {
+                uip_ds6_if.addr_list[i].state = ADDR_PREFERRED;
+            }
+        }
+    }
+}
 
 lwb_callbacks_t lwb_callbacks = {on_data, on_schedule_end};                                                                                                                       
 PROCESS_THREAD(tcp_server_process, ev, data)
@@ -208,7 +242,6 @@ PROCESS_THREAD(tcp_server_process, ev, data)
 
     set_ipaddr_from_id(&global_ip_addr, node_id);   
     uip_ds6_addr_add(&global_ip_addr, 0, ADDR_MANUAL);
-
 
     memset(tcpstats_info, 0, sizeof(tcpstats_t) * TCPSTATS_ELEMENTS);
     tcpstats_cnt = 0;
