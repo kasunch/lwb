@@ -24,12 +24,14 @@
 
 #define UIP_IP_BUF   ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
 
-#define TCP_SERVER_NODE_ID  12
+#define TCP_SERVER_NODE_ID  13
 #define TCP_CLIENT_NODE_ID  2
 #define LWB_HOST_NODE_ID    1
 #define TCP_PORT            20222
 
+// These delays are from the boot of the node
 #define TCP_CLIENT_CONNECT_DELAY    60
+#define SOURCE_NODE_START_DELAY     20
 
 #define TCP_PAYLOAD_LEN_FRAG_1      70
 #define TCP_PAYLOAD_LEN_FRAG_2      170
@@ -41,7 +43,7 @@
 // If the total payload is greater than (127 - (1 (relay counter) + 1 (Glossy header) + 8 (LWB data header)),
 // 6LoWPAN fragmentation headers (4 (FAG_1) + 5 (FAG_N)) should also be considered.
 
-#define TCP_PAYLOAD_LEN             TCP_PAYLOAD_LEN_FRAG_1
+#define TCP_PAYLOAD_LEN             TCP_PAYLOAD_LEN_FRAG_4
 
 enum {
   ECHO_MSG_TYPE_REQ = 0xBB,
@@ -252,6 +254,9 @@ PROCESS_THREAD(tcp_server_process, ev, data)
     
     } else {
         
+        etimer_set(&et, CLOCK_SECOND * SOURCE_NODE_START_DELAY);
+        PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+
         lwb_init(LWB_MODE_SOURCE, &lwb_callbacks);
 
         if (node_id == TCP_SERVER_NODE_ID || node_id == TCP_CLIENT_NODE_ID) {
@@ -262,7 +267,7 @@ PROCESS_THREAD(tcp_server_process, ev, data)
                 
             } else {
                 
-                etimer_set(&et, CLOCK_SECOND * TCP_CLIENT_CONNECT_DELAY);
+                etimer_set(&et, CLOCK_SECOND * (TCP_CLIENT_CONNECT_DELAY - SOURCE_NODE_START_DELAY));
                 PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
                 
                 set_ipaddr_from_id(&global_ip_addr, TCP_SERVER_NODE_ID);
