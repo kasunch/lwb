@@ -1616,7 +1616,6 @@ output(const uip_lladdr_t *localdest)
 //        return 0;
 //      }
     }
-    //printf("%u %u %u %u\n", pkt_len, uncmp_hdr_ln, pktbuf_hdr_ln, frgs); // TODO: LWB debugging
 #else /* SICSLOWPAN_CONF_FRAG */
     PRINTFO("sicslowpan output: Packet too large to be sent without fragmentation support; dropping packet\n");
     return 0;
@@ -1632,6 +1631,9 @@ output(const uip_lladdr_t *localdest)
     packetbuf_set_datalen(uip_len - uncomp_hdr_len + packetbuf_hdr_len);
     send_packet(&dest);
   }
+
+  //printf("%u %u %u %u\n", pkt_len, uncmp_hdr_ln, pktbuf_hdr_ln, frgs); // TODO: LWB debugging
+
   return 1;
 }
 
