@@ -53,7 +53,7 @@
 
 #define SICSLOWPAN_CONF_ADDR_CONTEXT_0          {addr_contexts[0].prefix[0]=0xaa;addr_contexts[0].prefix[1]=0xaa;}
 #define SICSLOWPAN_CONF_FRAG                    1
-#define SICSLOWPAN_CONF_MAC_MAX_PAYLOAD         (127 - 10)
+#define SICSLOWPAN_CONF_MAC_MAX_PAYLOAD         (127 - (2 + 10)) // Glossy uses 2 bytes and 8-byte LWB data header
 
 //#define UIP_CONF_IPV6_REASSEMBLY 1
 
