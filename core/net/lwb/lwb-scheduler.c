@@ -143,8 +143,8 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
 
     n_free_slots = (uint8_t)(random_rand() % 2);
 
-    n_possible_data_slots = (T_ROUND_PERIOD_MIN * RTIMER_SECOND -
-                                (T_SYNC_ON + n_free_slots * T_FREE_ON + T_COMP)) / (T_GAP + T_RR_ON);
+    n_possible_data_slots = ((T_ROUND_PERIOD_MIN * RTIMER_SECOND) -
+                                (T_SYNC_ON + (n_free_slots * T_FREE_ON) + T_COMP)) / (T_GAP + T_RR_ON);
 
     if (lwb_context.n_stream_acks > 0) {
         curr_sched_streams[n_curr_streams++] = NULL; // we set current stream to NULL
