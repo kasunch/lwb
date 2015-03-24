@@ -19,16 +19,16 @@ void lwb_print_stats() {
                     lwb_context.n_my_slots,
                     lwb_get_host_time());
 
-//    if (lwb_context.lwb_mode == LWB_MODE_SOURCE) {
+
+//    if (lwb_context.lwb_mode == LWB_MODE_HOST) {
 //        uint8_t i = 0;
-//        if (lwb_context.sync_state == LWB_SYNC_STATE_SYNCED ||
-//            lwb_context.sync_state == LWB_SYNC_STATE_UNSYNCED_1) {
-//            printf("S|");
-//            for (i = 0; i < GET_N_DATA_SLOTS(CURRENT_SCHEDULE_INFO().n_slots); i++) {
-//                printf("%X ", CURRENT_SCHEDULE().slots[i]);
-//            }
-//            printf("\n");
+//        printf("SL|");
+//        for (i = 0; i < GET_N_DATA_SLOTS(CURRENT_SCHEDULE_INFO().n_slots); i++) {
+//            printf("%X ", CURRENT_SCHEDULE().slots[i]);
 //        }
+//        printf("\n");
+//
+//        lwb_sched_print();
 //    }
 
     if (lwb_context.lwb_mode == LWB_MODE_HOST) {
