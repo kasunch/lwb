@@ -35,14 +35,14 @@
 
 #define TCP_PAYLOAD_LEN_FRAG_1      70
 #define TCP_PAYLOAD_LEN_FRAG_2      170
-#define TCP_PAYLOAD_LEN_FRAG_3      290
-#define TCP_PAYLOAD_LEN_FRAG_4      400
+#define TCP_PAYLOAD_LEN_FRAG_3      270
+#define TCP_PAYLOAD_LEN_FRAG_4      370
 
 // Available for application data
 // 127 - (1 (relay counter) + 1 (Glossy header) + 8 (LWB data header) + 20 (compressed IP header) + 20 (TCP))
 // If the total payload is greater than (127 - (1 (relay counter) + 1 (Glossy header) + 8 (LWB data header)),
 // 6LoWPAN fragmentation headers (4 (FAG_1) + 5 (FAG_N)) should also be considered.
-
+// NOTE the size of 6LoWPAN fragments should be multiples of 8
 #define TCP_PAYLOAD_LEN             TCP_PAYLOAD_LEN_FRAG_4
 
 enum {
@@ -199,6 +199,7 @@ static PT_THREAD(client_handler())
     return PT_ENDED;
 }
 
+#if 0
 static void
 print_local_addresses(void)
 {
@@ -218,6 +219,7 @@ print_local_addresses(void)
         }
     }
 }
+#endif
 
 lwb_callbacks_t lwb_callbacks = {on_data, on_schedule_end};                                                                                                                       
 PROCESS_THREAD(tcp_server_process, ev, data)
