@@ -157,7 +157,9 @@ static inline void compute_new_sync_state() {
         // Reference time of Glossy is updated.
         LWB_STATS_SYNC(ui16_synced)++;
 
-        if (CURRENT_SCHEDULE_INFO().time < OLD_SCHEDULE_INFO().time) {
+        if ((lwb_context.sync_state == LWB_SYNC_STATE_QUASI_SYNCED ||
+             lwb_context.sync_state == LWB_SYNC_STATE_SYNCED) &&
+                        (CURRENT_SCHEDULE_INFO().time < OLD_SCHEDULE_INFO().time)) {
             // 16-bit overflow
             UI32_SET_HIGH(lwb_context.ui32_time, UI32_GET_HIGH(lwb_context.ui32_time) + 1);
         }
