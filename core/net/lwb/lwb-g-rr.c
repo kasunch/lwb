@@ -97,7 +97,7 @@ static void prepare_data_packet() {
         // We have enough space on the buffer to send data. This is just a sanity check.
 
         // Set number of packets in the buffer that are ready to be transmitted
-        p_buf_item->buf.header.in_queue = ui8_tx_buf_q_size - 1;
+        p_buf_item->buf.header.in_queue = ui8_tx_buf_q_size;
 
         // First, we copy the data. The data header will be copied later at the end.
         // We may need to update options of the data header if we have stream requests to be sent.
@@ -312,6 +312,8 @@ static void process_data_packet(uint8_t slot_idx) {
     if (lwb_context.lwb_mode == LWB_MODE_HOST) {
 
         lwb_stream_req_t stream_req;
+
+        lwb_sched_update_qlen(slot_idx, p_item->buf.header.in_queue);
 
         if ((p_item->buf.header.options & 0x0f) == LWB_PKT_TYPE_STREAM_REQ) {
             // There are some stream requests in the data packet

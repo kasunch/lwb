@@ -113,6 +113,13 @@ typedef struct lwb_stream_info {
     uint8_t  n_cons_missed;       ///< Number of consecutive slot misses for the stream
     uint8_t  n_slots_used;        ///< Number of slots used in a round
     uint8_t  n_slots_allocated;   ///< Number of allocated slots for the stream in a round
+
+    uint8_t  avg_max_qlen;
+    uint8_t  max_qlen;            ///< Maximum length of the queue at the source node
+    uint8_t  max_qlen_tmp;
+    uint8_t  qlens[LWB_SCHED_MAX_QLEN_WNIDOW_SIZE];
+    uint8_t  n_qlens;
+
 } lwb_stream_info_t;
 
 /// @brief LWB callbacks
