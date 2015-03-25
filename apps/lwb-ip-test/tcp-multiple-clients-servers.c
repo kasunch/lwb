@@ -35,7 +35,7 @@
 // If the total payload is greater than (127 - (1 (relay counter) + 1 (Glossy header) + 8 (LWB data header)),
 // 6LoWPAN fragmentation headers (4 (FAG_1) + 5 (FAG_N)) should also be considered.
 // NOTE the size of 6LoWPAN fragments should be multiples of 8
-#define TCP_PAYLOAD_LEN             TCP_PAYLOAD_LEN_FRAG_4
+#define TCP_PAYLOAD_LEN             TCP_PAYLOAD_LEN_FRAG_1
 
 enum {
   ECHO_MSG_TYPE_REQ = 0xBB,
@@ -81,13 +81,13 @@ AUTOSTART_PROCESSES(&tcp_server_process);
 
 uint8_t is_server = 0;
 uint8_t is_client = 0;
-uint8_t client_start_time = 0;
+uint16_t client_start_time = 0;
 uint16_t server_node_id = 0;
 
 typedef struct {
     uint16_t client;
     uint16_t server;
-    uint8_t start_time;
+    uint16_t start_time;
 } tcp_client_server_t;
 
 #define TCP_PORT                    20222
@@ -95,10 +95,10 @@ typedef struct {
 // These delays are from the boot of the node
 #define SOURCE_NODE_START_DELAY     15
 tcp_client_server_t clients_servers[] = {   {2, 13, 60},
-                                            //{3, 10, 120},
-                                            //{4, 11, 180},
-                                            //{5, 12, 240},
-                                            //s{6, 14, 300}
+                                            {3, 10, 120},
+                                            {4, 11, 180},
+                                            {5, 12, 240},
+                                            {6, 14, 300}
                                         };
 
 static void set_servers_and_clients() {
@@ -299,8 +299,11 @@ PROCESS_THREAD(tcp_server_process, ev, data)
             tcp_listen(UIP_HTONS(TCP_PORT));
 
         } else if (is_client) {
-            etimer_set(&et, CLOCK_SECOND * client_start_time);
-            PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+
+            while (client_start_time > lwb_get_host_time()) {
+                etimer_set(&et, CLOCK_SECOND);
+                PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+            }
 
             set_ipaddr_from_id(&global_ip_addr, server_node_id);
             printf("connecting..\n");
