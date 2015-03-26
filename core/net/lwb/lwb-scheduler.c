@@ -260,12 +260,18 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
 
         // Update average maximum queue length
         if (crr_stream->n_qlens >= LWB_SCHED_MAX_QLEN_WNIDOW_SIZE) {
+
             uint16_t qlen_sum = 0;
             for (i = 0; i < crr_stream->n_qlens; i++) {
                 qlen_sum += crr_stream->qlens[i];
             }
+
             crr_stream->avg_max_qlen = qlen_sum / LWB_SCHED_MAX_QLEN_WNIDOW_SIZE;
+            // make sure that the stream has at least one packet in the queue
+            // Otherwise there will be an infinite loop
+            crr_stream->avg_max_qlen = (crr_stream->avg_max_qlen == 0 ? 1 : crr_stream->avg_max_qlen);
             crr_stream->n_qlens = 0; // Reset queue length window
+
         } else {
             crr_stream->qlens[crr_stream->n_qlens++] = crr_stream->max_qlen;
         }
@@ -336,16 +342,6 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
                     add_to_backlog(crr_stream);
                 }
             }
-
-//            if (n_data_slots_assigned < n_possible_data_slots) {
-//                // We have enough space in the schedule
-//                p_sched->slots[n_data_slots_assigned++] = crr_stream->node_id;
-//                crr_stream->n_slots_allocated++;
-//                curr_sched_streams[n_curr_streams++] = crr_stream;
-//            } else {
-//                // No remaining slots in this schedule. So adding to the backlog
-//                add_to_backlog(crr_stream);
-//            }
 
         }
     }
