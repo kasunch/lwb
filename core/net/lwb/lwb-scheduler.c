@@ -191,6 +191,13 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
     n_possible_data_slots = ((T_ROUND_PERIOD_MIN * RTIMER_SECOND) -
                                 (T_SYNC_ON + (n_free_slots * T_FREE_ON) + T_COMP)) / (T_GAP + T_RR_ON);
 
+    //n_possible_data_slots = ((T_ROUND_PERIOD_MIN * RTIMER_SECOND) -
+    //                           T_SYNC_ON -
+    //                           T_COMP -
+    //                           (n_free_slots * T_FREE_ON) -
+    //                           (n_free_slots * T_GAP)) / (T_GAP + T_RR_ON);
+
+
     if (lwb_context.n_stream_acks > 0) {
         // We have acks to be sent.
         curr_sched_streams[n_curr_streams++] = NULL; // There is no stream associated for acks
