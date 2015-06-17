@@ -39,21 +39,21 @@ LIST(backlog_slot_list);
 static uint16_t n_backlog_slots = 0;
 
 //--------------------------------------------------------------------------------------------------
-static void inline add_stream(uint16_t ui16_node_id, lwb_stream_req_t *p_req) {
+static void inline add_stream(uint16_t node_id, lwb_stream_req_t *p_req) {
 
     lwb_stream_info_t *crr_stream;
 
     for (crr_stream = list_head(streams_list); crr_stream != NULL; crr_stream = crr_stream->next) {
 
-        if (ui16_node_id == crr_stream->node_id &&
+        if (node_id == crr_stream->node_id &&
                         GET_STREAM_ID(p_req->req_type) == crr_stream->stream_id) {
 
             // We have a stream add request with an existing stream ID.
-            // This could happen due to the node has not received the stream acknowledgment.
-            // So we add an acknowledgment from him. Otherwise he will keep sending stream
+            // This could happen due to the node has not received the stream acknowledgement.
+            // So we add an acknowledgement from him. Otherwise he will keep sending stream
             // requests.
 
-            LWB_STATS_SCHED(ui16_n_duplicates)++;
+            LWB_STATS_SCHED(n_duplicates)++;
 
             if (lwb_context.n_stream_acks >= LWB_SCHED_MAX_SLOTS) {
                 // Maximum space for stream acks exceeded.
@@ -61,7 +61,7 @@ static void inline add_stream(uint16_t ui16_node_id, lwb_stream_req_t *p_req) {
                 return;
             }
 
-            lwb_context.ui16arr_stream_akcs[lwb_context.n_stream_acks++] = ui16_node_id;
+            lwb_context.ui16arr_stream_akcs[lwb_context.n_stream_acks++] = node_id;
 
         }
     }
@@ -69,12 +69,12 @@ static void inline add_stream(uint16_t ui16_node_id, lwb_stream_req_t *p_req) {
     crr_stream = memb_alloc(&streams_memb);
     if (crr_stream == NULL) {
         // Oops..! no space for new streams
-        LWB_STATS_SCHED(ui16_n_no_space)++;
+        LWB_STATS_SCHED(n_no_space)++;
         return;
     }
 
     memset(crr_stream, 0, sizeof(lwb_stream_info_t));
-    crr_stream->node_id = ui16_node_id;
+    crr_stream->node_id = node_id;
     crr_stream->ipi = p_req->ipi;
     crr_stream->last_assigned = p_req->time_info - p_req->ipi;
     crr_stream->next_ready = p_req->time_info;
@@ -85,8 +85,7 @@ static void inline add_stream(uint16_t ui16_node_id, lwb_stream_req_t *p_req) {
     list_add(streams_list, crr_stream);
     n_streams++;
 
-    LWB_STATS_SCHED(ui16_n_added)++;
-
+    LWB_STATS_SCHED(n_added)++;
 
 }
 
@@ -102,7 +101,7 @@ static void del_stream_ex(lwb_stream_info_t *stream) {
 }
 
 //--------------------------------------------------------------------------------------------------
-static void inline del_stream(uint16_t id, lwb_stream_req_t *p_req) {
+static inline void del_stream(uint16_t id, lwb_stream_req_t *p_req) {
 
     lwb_stream_info_t *prev_stream;
 
@@ -114,17 +113,6 @@ static void inline del_stream(uint16_t id, lwb_stream_req_t *p_req) {
             return;
         }
     }
-}
-
-//--------------------------------------------------------------------------------------------------
-void lwb_sched_init(void) {
-    // Initialize streams memory blocks and list
-     memb_init(&streams_memb);
-     list_init(streams_list);
-     n_streams = 0;
-     memb_init(&backlog_slot_memb);
-     list_init(backlog_slot_list);
-     n_backlog_slots = 0;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -154,6 +142,17 @@ static inline void add_to_backlog(lwb_stream_info_t *stream) {
     }
 }
 
+//--------------------------------------------------------------------------------------------------
+void lwb_sched_init(void) {
+    // Initialize streams memory blocks and list
+    memb_init(&streams_memb);
+    list_init(streams_list);
+    n_streams = 0;
+    memb_init(&backlog_slot_memb);
+    list_init(backlog_slot_list);
+    n_backlog_slots = 0;
+}
+
 #if defined (LWB_SHEDULER_NAIVE)
 //--------------------------------------------------------------------------------------------------
 void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
@@ -168,7 +167,7 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
     // Recycle unused data slots based on activity
     for (crr_stream = list_head(streams_list); crr_stream != NULL;) {
 
-        LWB_STATS_SCHED(ui16_n_unused_slots) += crr_stream->n_slots_allocated - crr_stream->n_slots_used;
+        LWB_STATS_SCHED(n_unused_slots) += crr_stream->n_slots_allocated - crr_stream->n_slots_used;
         // Reset counters before computing schedule
         crr_stream->n_slots_allocated = 0;
         crr_stream->n_slots_used = 0;
@@ -197,6 +196,13 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
 
     n_possible_data_slots = ((T_ROUND_PERIOD_MIN * RTIMER_SECOND) -
                                 (T_SYNC_ON + (n_free_slots * T_FREE_ON) + T_COMP)) / (T_GAP + T_RR_ON);
+
+    //n_possible_data_slots = ((T_ROUND_PERIOD_MIN * RTIMER_SECOND) -
+    //                           T_SYNC_ON -
+    //                           T_COMP -
+    //                           (n_free_slots * T_FREE_ON) -
+    //                           (n_free_slots * T_GAP)) / (T_GAP + T_RR_ON);
+
 
     if (lwb_context.n_stream_acks > 0) {
         // We have acks to be sent.
@@ -238,7 +244,7 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
     SET_N_DATA_SLOTS(p_sched->sched_info.n_slots, n_data_slots_assigned);
 
     p_sched->sched_info.host_id = node_id;
-    p_sched->sched_info.time = UI32_GET_LOW(lwb_context.ui32_time);
+    p_sched->sched_info.time = UI32_GET_LOW(lwb_context.time);
     p_sched->sched_info.round_period = T_ROUND_PERIOD_MIN;
 
 }
@@ -247,6 +253,7 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
 
 //--------------------------------------------------------------------------------------------------
 void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
+
     uint8_t n_free_slots;
     uint8_t n_possible_data_slots;
     uint8_t n_data_slots_assigned = 0;
@@ -254,66 +261,66 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
     lwb_stream_info_t *to_be_removed;
     backlog_slot_item_t* item;
     uint8_t  i;
-
+ 
     // Recycle unused data slots based on activity
     for (crr_stream = list_head(streams_list); crr_stream != NULL;) {
-
+ 
         // Update average maximum queue length
         if (crr_stream->n_qlens >= LWB_SCHED_MAX_QLEN_WNIDOW_SIZE) {
-
+ 
             uint16_t qlen_sum = 0;
             for (i = 0; i < crr_stream->n_qlens; i++) {
                 qlen_sum += crr_stream->qlens[i];
             }
-
+ 
             crr_stream->avg_max_qlen = qlen_sum / LWB_SCHED_MAX_QLEN_WNIDOW_SIZE;
             // make sure that the stream has at least one packet in the queue
             // Otherwise there will be an infinite loop
             crr_stream->avg_max_qlen = (crr_stream->avg_max_qlen == 0 ? 1 : crr_stream->avg_max_qlen);
             crr_stream->n_qlens = 0; // Reset queue length window
-
+ 
         } else {
             crr_stream->qlens[crr_stream->n_qlens++] = crr_stream->max_qlen;
         }
         // Reset current maximum queue length
         crr_stream->max_qlen = 0;
-
-        LWB_STATS_SCHED(ui16_n_unused_slots) += crr_stream->n_slots_allocated - crr_stream->n_slots_used;
+ 
+        LWB_STATS_SCHED(n_unused_slots) += crr_stream->n_slots_allocated - crr_stream->n_slots_used;
         // Reset counters before computing schedule
         crr_stream->n_slots_allocated = 0;
         crr_stream->n_slots_used = 0;
-
+ 
         if (crr_stream->n_cons_missed > LWB_SCHED_N_CONS_MISSED_MAX) {
-
+ 
             to_be_removed = crr_stream;
             crr_stream = crr_stream->next;
             // Delete corresponding backlog slots
             delete_all_from_backlog(to_be_removed);
-
+ 
             // Delete from streams list and free the allocated memory.
             del_stream_ex(to_be_removed);
-
+ 
         } else {
             crr_stream = crr_stream->next;
         }
     }
-
-
+ 
+ 
     // reset current streams
     memset(curr_sched_streams, 0, sizeof(lwb_stream_info_t*) * LWB_SCHED_MAX_SLOTS);
     n_curr_streams = 0;
-
+ 
     n_free_slots = (uint8_t)(random_rand() % 2);
-
+ 
     n_possible_data_slots = ((T_ROUND_PERIOD_MIN * RTIMER_SECOND) -
                                 (T_SYNC_ON + (n_free_slots * T_FREE_ON) + T_COMP)) / (T_GAP + T_RR_ON);
-
+ 
     if (lwb_context.n_stream_acks > 0) {
         // We have acks to be sent.
         curr_sched_streams[n_curr_streams++] = NULL; // There is no stream associated for acks
         p_sched->slots[n_data_slots_assigned++] = 0;
     }
-
+ 
     // Allocate slots from the backlog first
     while ((item = list_pop(backlog_slot_list)) != NULL) {
         p_sched->slots[n_data_slots_assigned++] = item->stream->node_id;
@@ -322,17 +329,17 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
         memb_free(&backlog_slot_memb, item);
     }
     n_backlog_slots = 0;
-
+ 
     // Allocate slots based on the main streams
     while (n_streams != 0 && n_data_slots_assigned < n_possible_data_slots) {
-
+ 
         for (crr_stream = list_head(streams_list);
                         crr_stream != NULL;
                         crr_stream = crr_stream->next) {
-
-
+ 
+ 
             for(i = 0; i < crr_stream->avg_max_qlen; i++) {
-
+ 
                 if (n_data_slots_assigned < n_possible_data_slots) {
                     p_sched->slots[n_data_slots_assigned++] = crr_stream->node_id;
                     crr_stream->n_slots_allocated++;
@@ -342,16 +349,16 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
                     add_to_backlog(crr_stream);
                 }
             }
-
+ 
         }
     }
-
+ 
     // Set number of free and assigned data slots
     SET_N_FREE_SLOTS(p_sched->sched_info.n_slots, n_free_slots);
     SET_N_DATA_SLOTS(p_sched->sched_info.n_slots, n_data_slots_assigned);
-
+ 
     p_sched->sched_info.host_id = node_id;
-    p_sched->sched_info.time = UI32_GET_LOW(lwb_context.ui32_time);
+    p_sched->sched_info.time = UI32_GET_LOW(lwb_context.time);
     p_sched->sched_info.round_period = T_ROUND_PERIOD_MIN;
 
 }
@@ -360,18 +367,18 @@ void lwb_sched_compute_schedule(lwb_schedule_t* p_sched) {
 #endif
 
 //--------------------------------------------------------------------------------------------------
-void lwb_sched_process_stream_req(uint16_t ui16_id, lwb_stream_req_t *p_req) {
+void lwb_sched_process_stream_req(uint16_t id, lwb_stream_req_t *p_req) {
 
     switch (GET_STREAM_TYPE(p_req->req_type)) {
         case LWB_STREAM_TYPE_ADD:
-            add_stream(ui16_id, p_req);
+            add_stream(id, p_req);
             break;
         case LWB_STREAM_TYPE_DEL:
-            del_stream(ui16_id, p_req);
+            del_stream(id, p_req);
             break;
         case LWB_STREAM_TYPE_MOD:
-            del_stream(ui16_id, p_req);
-            add_stream(ui16_id, p_req);
+            del_stream(id, p_req);
+            add_stream(id, p_req);
             break;
         default:
             break;
@@ -383,7 +390,7 @@ void lwb_sched_process_stream_req(uint16_t ui16_id, lwb_stream_req_t *p_req) {
 
 void lwb_sched_update_data_slot_usage(uint8_t slot_index, uint8_t used) {
 
-    if (slot_index < n_curr_streams && curr_sched_streams[slot_index]) {
+    if (slot_index > 0 && slot_index < n_curr_streams && curr_sched_streams[slot_index]) {
 
         if (used) {
             curr_sched_streams[slot_index]->n_slots_used++;

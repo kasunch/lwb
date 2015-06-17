@@ -32,7 +32,7 @@ void lwb_print_stats() {
 //    }
 
     if (lwb_context.lwb_mode == LWB_MODE_HOST) {
-        printf("S|%u %u |%lu\n", LWB_STATS_SCHED(ui16_n_unused_slots), LWB_STATS_SYNC(ui16_sync_missed), lwb_get_host_time());
+        printf("S|%u %u |%lu\n", LWB_STATS_SCHED(n_unused_slots), LWB_STATS_SYNC(n_sync_missed), lwb_get_host_time());
     } else {
         //printf("L|%lu\n", lwb_context.ui32_time);
     }

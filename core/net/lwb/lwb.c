@@ -108,5 +108,5 @@ PROCESS_THREAD(lwb_main_process, ev, data)
 }
 
 uint32_t lwb_get_host_time() {
-    return lwb_context.ui32_time;
+    return lwb_context.time;
 }

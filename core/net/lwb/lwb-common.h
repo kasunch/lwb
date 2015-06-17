@@ -33,7 +33,7 @@ typedef enum {
 typedef enum {
     LWB_PKT_TYPE_NO_DATA = 0,   ///< No Type
     LWB_PKT_TYPE_STREAM_REQ,    ///< Stream requests
-    LWB_PKT_TYPE_STREAM_ACK,    ///< Stream acknowledgments
+    LWB_PKT_TYPE_STREAM_ACK,    ///< Stream acknowledgements
     LWB_PKT_TYPE_DATA,          ///< Data packets
     LWB_PKT_TYPE_SCHED          ///< Schedule packets
 } pkt_types_t;
@@ -131,35 +131,35 @@ typedef struct lwb_callbacks {
 
 /// @brief Scheduler related statistics
 typedef struct lwb_sched_stats {
-    uint16_t ui16_n_added;          ///< Number of streams added so far
-    uint16_t ui16_n_deleted;        ///< Number of streams deleted so far
-    uint16_t ui16_n_no_space;       ///< Number of streams that are unable to add due to space unavailability
-    uint16_t ui16_n_modified;       ///< Number of streams modified
-    uint16_t ui16_n_duplicates;     ///< Number of duplicated stream requests
-    uint16_t ui16_n_unused_slots;
+    uint16_t n_added;          ///< Number of streams added so far
+    uint16_t n_deleted;        ///< Number of streams deleted so far
+    uint16_t n_no_space;       ///< Number of streams that are unable to add due to space unavailability
+    uint16_t n_modified;       ///< Number of streams modified
+    uint16_t n_duplicates;     ///< Number of duplicated stream requests
+    uint16_t n_unused_slots;
 } lwb_sched_stats_t;
 
 /// @brief Glossy synchronization related statistics
 typedef struct lwb_sync_stats {
-    uint16_t ui16_synced;           ///< Number of instances that the schedule is received
-    uint16_t ui16_sync_missed;      ///< Number of instances that the schedule is not received
+    uint16_t n_synced;           ///< Number of instances that the schedule is received
+    uint16_t n_sync_missed;      ///< Number of instances that the schedule is not received
 } lwb_sync_stats_t;
 
 /// @brief Statistics related to data packets
 typedef struct lwb_data_stats {
-    uint16_t ui16_n_tx_nospace;     ///< Number of instances in which unable to allocate memory for transmitting data
-    uint16_t ui16_n_rx_nospace;     ///< Number of instances in which unable to allocate memory for receiving data
-    uint16_t ui16_n_tx;             ///< Number of data packets transmitted
-    uint16_t ui16_n_rx;             ///< Number of data packets received
-    uint16_t ui16_n_rx_dropped;     ///< Number of data packets dropped
+    uint16_t n_tx_nospace;     ///< Number of instances in which unable to allocate memory for transmitting data
+    uint16_t n_rx_nospace;     ///< Number of instances in which unable to allocate memory for receiving data
+    uint16_t n_tx;             ///< Number of data packets transmitted
+    uint16_t n_rx;             ///< Number of data packets received
+    uint16_t n_rx_dropped;     ///< Number of data packets dropped
 } lwb_data_stats_t;
 
-/// @brief Stream requests and acknowledgment related statistics
+/// @brief Stream requests and acknowledgement related statistics
 typedef struct lwb_stream_req_ack_stats {
-    uint16_t ui16_n_req_tx;         ///< Number of stream requests sent
-    uint16_t ui16_n_req_rx;         ///< Number of stream requests received
-    uint16_t ui16_n_ack_tx;         ///< Number of stream acknowledgments sent
-    uint16_t ui16_n_ack_rx;         ///< Number of stream acknowledgments received
+    uint16_t n_req_tx;         ///< Number of stream requests sent
+    uint16_t n_req_rx;         ///< Number of stream requests received
+    uint16_t n_ack_tx;         ///< Number of stream acknowledgements sent
+    uint16_t n_ack_rx;         ///< Number of stream acknowledgements received
 } lwb_stream_req_ack_stats_t;
 
 
@@ -168,7 +168,7 @@ typedef struct lwb_context {
     // common
     lwb_schedule_t  current_sched;                              ///< Current schedule.
     lwb_schedule_t  old_sched;                                  ///< Old schedule.
-    uint32_t        ui32_time;                                  ///< Global time in seconds
+    uint32_t        time;                                       ///< Global time in seconds
     int32_t         skew;                                       ///< Clock skew per unit time in rtimer ticks.
     uint16_t        t_sync_guard;                               ///< Guard time that Glossy should be started earlier for receiving schedule.
     uint16_t        t_sync_ref;                                 ///< Reference time of the host when schedule is received in rtimer ticks.
@@ -177,7 +177,7 @@ typedef struct lwb_context {
     lwb_callbacks_t *p_callbacks;                               ///< Call back functions.
     uint8_t         lwb_mode;                                   ///< Mode of LWB @see lwb_mode_t
     struct rtimer   rt;                                         ///< the real-time timer used to start glossy phases
-    uint8_t         ui8arr_txrx_buf[LWB_MAX_TXRX_BUF_LEN];      ///< TX/RX buffer
+    uint8_t         txrx_buf[LWB_MAX_TXRX_BUF_LEN];             ///< TX/RX buffer
     uint8_t         txrx_buf_len;                               ///< The length of the data in TX/RX buffer
     uint8_t         poll_flags;                                 ///< Flags that indicate why LWB main process is polled.
     uint8_t         n_my_slots;                                 ///< Number of slots allocated for the node
@@ -187,8 +187,8 @@ typedef struct lwb_context {
     uint8_t         joining_state;                              ///< Joining state
 
     // host
-    uint16_t        ui16arr_stream_akcs[LWB_SCHED_MAX_SLOTS];   ///< IDs of the nodes which stream acknowledgments to be sent
-    uint8_t         n_stream_acks;                              ///< Number of stream acknowledgments
+    uint16_t        ui16arr_stream_akcs[LWB_SCHED_MAX_SLOTS];   ///< IDs of the nodes which stream acknowledgements to be sent
+    uint8_t         n_stream_acks;                              ///< Number of stream acknowledgements
 
     // stats
     lwb_sync_stats_t            sync_stats;
@@ -250,10 +250,10 @@ typedef struct stream_req_lst_item {
 /// @addtogroup UI32 Macros
 ///           Unsign 32-bit integer lated macros to get/set low/high segments.
 /// @{
-#define UI32_GET_LOW(ui32_var)             (uint16_t)(ui32_var & 0xffff)
-#define UI32_GET_HIGH(ui32_var)            (uint16_t)(ui32_var >> 16)
-#define UI32_SET_LOW(ui32_var, ui16_val)   (ui32_var = ((uint32_t)UI32_GET_HIGH(ui32_var) << 16) | (uint32_t)((ui16_val) & 0xffff))
-#define UI32_SET_HIGH(ui32_var, ui16_val)  (ui32_var = ((uint32_t)(ui16_val) << 16) | (uint32_t)UI32_GET_LOW(ui32_var))
+#define UI32_GET_LOW(var)             (uint16_t)(var & 0xffff)
+#define UI32_GET_HIGH(var)            (uint16_t)(var >> 16)
+#define UI32_SET_LOW(var, val)   (var = ((uint32_t)UI32_GET_HIGH(var) << 16) | (uint32_t)((val) & 0xffff))
+#define UI32_SET_HIGH(var, val)  (var = ((uint32_t)(val) << 16) | (uint32_t)UI32_GET_LOW(var))
 
 /// @}
 
