@@ -95,6 +95,7 @@ contiki-cc2530dk.lib
 # Eclipse files
 .project
 .cproject
+.pydevproject
 .settings
 
 #GDB files
