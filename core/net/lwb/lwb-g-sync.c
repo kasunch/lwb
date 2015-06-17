@@ -21,7 +21,7 @@ PROCESS_NAME(lwb_main_process);
 
 void lwb_save_ctrl_energest() {
     // This function should be called before starting Glossy for schedules, stream requests and
-    // stream acknowledgments
+    // stream acknowledgements
 #if LWB_CONTROL_DC
     lwb_context.en_rx = energest_type_time(ENERGEST_TYPE_LISTEN);
     lwb_context.en_tx = energest_type_time(ENERGEST_TYPE_TRANSMIT);
@@ -29,7 +29,7 @@ void lwb_save_ctrl_energest() {
 }
 void lwb_update_ctrl_energest() {
     // This function should be called after Glossy finishes for schedules, stream requests and
-    // stream acknowledgments
+    // stream acknowledgements
 #if LWB_CONTROL_DC
     lwb_context.en_control += (energest_type_time(ENERGEST_TYPE_LISTEN) - lwb_context.en_rx) +
                                     (energest_type_time(ENERGEST_TYPE_TRANSMIT) - lwb_context.en_tx);
@@ -47,10 +47,10 @@ PT_THREAD(lwb_g_sync_host(struct rtimer *t, lwb_context_t *p_context)) {
     PT_BEGIN(&pt_lwb_g_sync);
 
     // Compress and copy the schedule to buffer
-    memcpy(lwb_context.ui8arr_txrx_buf, &CURRENT_SCHEDULE_INFO(), sizeof(lwb_sched_info_t));
+    memcpy(lwb_context.txrx_buf, &CURRENT_SCHEDULE_INFO(), sizeof(lwb_sched_info_t));
     lwb_context.txrx_buf_len = sizeof(lwb_sched_info_t);
     lwb_context.txrx_buf_len += lwb_sched_compress(&CURRENT_SCHEDULE(),
-                                                       lwb_context.ui8arr_txrx_buf + lwb_context.txrx_buf_len,
+                                                       lwb_context.txrx_buf + lwb_context.txrx_buf_len,
                                                        LWB_MAX_TXRX_BUF_LEN - lwb_context.txrx_buf_len);
 
     // Assume the reference time is estimated 1 second ago.
@@ -62,9 +62,9 @@ PT_THREAD(lwb_g_sync_host(struct rtimer *t, lwb_context_t *p_context)) {
         lwb_context.t_start = RTIMER_TIME(t);
 
         // Disseminate schedule
-        // At this point, we expect the compressed scheduled to be in p_context->ui8arr_txrx_buf and
+        // At this point, we expect the compressed scheduled to be in p_context->txrx_buf and
         // p_context->txrx_buf_len is set accordingly.
-        glossy_start(lwb_context.ui8arr_txrx_buf,
+        glossy_start(lwb_context.txrx_buf,
                      lwb_context.txrx_buf_len,
                      GLOSSY_INITIATOR,
                      GLOSSY_SYNC,
@@ -85,7 +85,7 @@ PT_THREAD(lwb_g_sync_host(struct rtimer *t, lwb_context_t *p_context)) {
             // we set the reference time taken from Glossy
             lwb_context.t_sync_ref = GLOSSY_T_REF;
 
-            LWB_STATS_SYNC(ui16_synced)++;
+            LWB_STATS_SYNC(n_synced)++;
 
         } else {
             // Glossy is not time synchronized (e.g. when no nodes are around)
@@ -96,7 +96,7 @@ PT_THREAD(lwb_g_sync_host(struct rtimer *t, lwb_context_t *p_context)) {
             lwb_context.t_sync_ref = lwb_context.t_sync_ref + (RTIMER_SECOND * (t_diff % 2));
             set_t_ref_l(lwb_context.t_sync_ref);
 
-            LWB_STATS_SYNC(ui16_sync_missed)++;
+            LWB_STATS_SYNC(n_sync_missed)++;
         }
 
         lwb_g_rr_host(t, p_context);
@@ -155,16 +155,16 @@ static inline void compute_new_sync_state() {
 
     if (GLOSSY_IS_SYNCED()) {
         // Reference time of Glossy is updated.
-        LWB_STATS_SYNC(ui16_synced)++;
+        LWB_STATS_SYNC(n_synced)++;
 
         if ((lwb_context.sync_state == LWB_SYNC_STATE_QUASI_SYNCED ||
              lwb_context.sync_state == LWB_SYNC_STATE_SYNCED) &&
                         (CURRENT_SCHEDULE_INFO().time < OLD_SCHEDULE_INFO().time)) {
             // 16-bit overflow
-            UI32_SET_HIGH(lwb_context.ui32_time, UI32_GET_HIGH(lwb_context.ui32_time) + 1);
+            UI32_SET_HIGH(lwb_context.time, UI32_GET_HIGH(lwb_context.time) + 1);
         }
 
-        UI32_SET_LOW(lwb_context.ui32_time, CURRENT_SCHEDULE_INFO().time);
+        UI32_SET_LOW(lwb_context.time, CURRENT_SCHEDULE_INFO().time);
 
         switch (lwb_context.sync_state) {
             case LWB_SYNC_STATE_BOOTSTRAP:
@@ -192,7 +192,7 @@ static inline void compute_new_sync_state() {
     } else {
         // Reference time of Glossy is not updated.
 
-        LWB_STATS_SYNC(ui16_sync_missed)++;
+        LWB_STATS_SYNC(n_sync_missed)++;
 
         switch (lwb_context.sync_state) {
             case LWB_SYNC_STATE_SYNCED:
@@ -271,7 +271,7 @@ PT_THREAD(lwb_g_sync_source(struct rtimer *t, lwb_context_t *p_context)) {
             // We are in the bootstrap mode.
             // Start Glossy to receive initial schedule.
             lwb_save_ctrl_energest();
-            glossy_start(lwb_context.ui8arr_txrx_buf,
+            glossy_start(lwb_context.txrx_buf,
                          0,
                          GLOSSY_RECEIVER,
                          GLOSSY_SYNC,
@@ -296,7 +296,7 @@ PT_THREAD(lwb_g_sync_source(struct rtimer *t, lwb_context_t *p_context)) {
                 //while (RTIMER_CLOCK_LT(RTIMER_NOW(), now + RTIMER_SECOND / 20));
 
                 lwb_save_ctrl_energest();
-                glossy_start(lwb_context.ui8arr_txrx_buf,
+                glossy_start(lwb_context.txrx_buf,
                              0,
                              GLOSSY_RECEIVER,
                              GLOSSY_SYNC,
@@ -313,7 +313,7 @@ PT_THREAD(lwb_g_sync_source(struct rtimer *t, lwb_context_t *p_context)) {
             // We are not in the bootstrap mode.
             // we try to receive schedule
             lwb_save_ctrl_energest();
-            glossy_start(lwb_context.ui8arr_txrx_buf,
+            glossy_start(lwb_context.txrx_buf,
                          0,
                          GLOSSY_RECEIVER,
                          GLOSSY_SYNC,
@@ -338,7 +338,7 @@ PT_THREAD(lwb_g_sync_source(struct rtimer *t, lwb_context_t *p_context)) {
 
         lwb_context.txrx_buf_len = get_data_len();
         // We copy only the schedule header.
-        memcpy(&CURRENT_SCHEDULE_INFO(), lwb_context.ui8arr_txrx_buf, sizeof(lwb_sched_info_t));
+        memcpy(&CURRENT_SCHEDULE_INFO(), lwb_context.txrx_buf, sizeof(lwb_sched_info_t));
         compute_new_sync_state();
 
         if ((lwb_context.sync_state == LWB_SYNC_STATE_SYNCED || lwb_context.sync_state == LWB_SYNC_STATE_UNSYNCED_1)) {
@@ -348,7 +348,7 @@ PT_THREAD(lwb_g_sync_source(struct rtimer *t, lwb_context_t *p_context)) {
                 // We decompress schedule if the state is synced. Otherwise, we do not need to do
                 // it since we copy the old schedule to current schedule
                 lwb_sched_decompress(&CURRENT_SCHEDULE(),
-                                     lwb_context.ui8arr_txrx_buf + sizeof(lwb_sched_info_t),
+                                     lwb_context.txrx_buf + sizeof(lwb_sched_info_t),
                                      lwb_context.txrx_buf_len - sizeof(lwb_sched_info_t));
                 lwb_context.n_my_slots = lwb_get_n_my_slots();
             } else {
