@@ -30,8 +30,8 @@ inline void send_stream_mod() {
         lwb_request_stream_mod(1, 1);
     } else {
         // It is possible that we are joining or partly joined.
-        // This means that we are waiting for an acknowledgment. We do not send more stream add(mod)
-        // requests until we receive an acknowledgment.
+        // This means that we are waiting for an acknowledgement. We do not send more stream add(mod)
+        // requests until we receive an acknowledgement.
 
         // It is also possible that the host has assigned some slots for us.
         // We just use them
