@@ -41,9 +41,9 @@ void lwb_print_stats() {
 
     if (lwb_context.lwb_mode == LWB_MODE_HOST) {
         printf("stream stats [added %u, dups : %u, no_space %u]\n",
-                LWB_STATS_SCHED(ui16_n_added),
-                LWB_STATS_SCHED(ui16_n_duplicates),
-                LWB_STATS_SCHED(ui16_n_no_space));
+                LWB_STATS_SCHED(n_added),
+                LWB_STATS_SCHED(n_duplicates),
+                LWB_STATS_SCHED(n_no_space));
     }
 
 }
