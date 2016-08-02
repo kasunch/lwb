@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010, Swedish Institute of Computer Science.
+ * Copyright (c) 2014, Uppsala University, Sweden.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,56 +26,37 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
+ * Author: Kasun Hewage <kasun.hewage@it.uu.se>
+ *
  */
 
-/**
- * \file
- *         A set of debugging tools
- * \author
- *         Nicolas Tsiftes <nvt@sics.se>
- *         Niclas Finne <nfi@sics.se>
- *         Joakim Eriksson <joakime@sics.se>
- */
+#ifndef __PROJECT_CONF_H__
+#define __PROJECT_CONF_H__
 
-#include "uip-debug.h"
+//#ifndef UIP_CONF_BUFFER_SIZE
+//#define UIP_CONF_BUFFER_SIZE    140
+//#endif
 
-/*---------------------------------------------------------------------------*/
-void
-uip_debug_ipaddr_print(const uip_ipaddr_t *addr)
-{
-#if UIP_CONF_IPV6
-  uint16_t a;
-  unsigned int i;
-  int f;
-  for(i = 0, f = 0; i < sizeof(uip_ipaddr_t); i += 2) {
-    a = (addr->u8[i] << 8) + addr->u8[i + 1];
-    if(a == 0 && f >= 0) {
-      if(f++ == 0) {
-        PRINTA("::");
-      }
-    } else {
-      if(f > 0) {
-        f = -1;
-      } else if(i > 0) {
-        PRINTA(":");
-      }
-      PRINTA("%x", a);
-    }
-  }
-#else /* UIP_CONF_IPV6 */
-  PRINTA("%u.%u.%u.%u", addr->u8[0], addr->u8[1], addr->u8[2], addr->u8[3]);
-#endif /* UIP_CONF_IPV6 */
-}
-/*---------------------------------------------------------------------------*/
-void
-uip_debug_lladdr_print(const uip_lladdr_t *addr)
-{
-  unsigned int i;
-  for(i = 0; i < sizeof(uip_lladdr_t); i++) {
-    if(i > 0) {
-      PRINTA(":");
-    }
-    PRINTA("%02x", addr->addr[i]);
-  }
-}
-/*---------------------------------------------------------------------------*/
+//#ifndef UIP_CONF_RECEIVE_WINDOW
+//#define UIP_CONF_RECEIVE_WINDOW     60
+//#endif
+
+//#define RF_POWER                    17
+
+//#undef RF_CHANNEL
+//#define RF_CHANNEL	26
+
+#define SICSLOWPAN_CONF_COMPRESSION_IPV6        0
+#define SICSLOWPAN_CONF_COMPRESSION_HC1         1
+#define SICSLOWPAN_CONF_COMPRESSION_HC06        2
+
+#undef SICSLOWPAN_CONF_COMPRESSION
+#define SICSLOWPAN_CONF_COMPRESSION             SICSLOWPAN_CONF_COMPRESSION_HC06
+
+#define SICSLOWPAN_CONF_ADDR_CONTEXT_0          {addr_contexts[0].prefix[0]=0xaa;addr_contexts[0].prefix[1]=0xaa;}
+#define SICSLOWPAN_CONF_FRAG                    1
+#define SICSLOWPAN_CONF_MAC_MAX_PAYLOAD         (127 - (2 + 10)) // Glossy uses 2 bytes and 8-byte LWB data header
+
+//#define UIP_CONF_IPV6_REASSEMBLY 1
+
+#endif /* __PROJECT_CONF_H__ */

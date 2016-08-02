@@ -1,3 +1,35 @@
+/*
+ * Copyright (c) 2014, Uppsala University, Sweden.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the Institute nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE INSTITUTE AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE INSTITUTE OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * Author: Kasun Hewage <kasun.hewage@it.uu.se>
+ *
+ */
+
 #ifndef __LWB_CONF_DEFAULT_H__
 #define __LWB_CONF_DEFAULT_H__
 
@@ -7,7 +39,7 @@
 /// @defgroup Configurations
 /// @{
 
-/// @brief Maximum size of the TX RX buffer. Node Glossy use 2 bytes for relay counter and header.
+/// @brief Maximum size of the TX RX buffer. Note: Glossy uses 2 bytes for relay counter and header.
 #ifdef LWB_CONF_MAX_TXRX_BUF_LEN
 #define LWB_MAX_TXRX_BUF_LEN        LWB_CONF_MAX_TXRX_BUF_LEN
 #else
@@ -76,6 +108,13 @@
 #define T_GAP                       LWB_CONF_T_GAP
 #else
 #define T_GAP                       (RTIMER_SECOND / 25)           // 40 ms
+#endif
+
+/// @brief Time for schedule computation.
+#ifdef LWB_CONF_T_COMP
+#define T_COMP                       LWB_CONF_T_COMP
+#else
+#define T_COMP                       (RTIMER_SECOND / 20)           // 50 ms
 #endif
 
 /// @brief The gap between schedule and first data slots
@@ -161,8 +200,21 @@
 #ifdef LWB_CONF_SCHED_N_CONS_MISSED_MAX
 #define LWB_SCHED_N_CONS_MISSED_MAX LWB_CONF_SCHED_N_CONS_MISSED_MAX
 #else
-#define LWB_SCHED_N_CONS_MISSED_MAX 60
+#define LWB_SCHED_N_CONS_MISSED_MAX 200
 #endif
+
+#ifdef LWB_CONF_SCHED_MAX_QLEN_WNIDOW_SIZE
+#define LWB_SCHED_MAX_QLEN_WNIDOW_SIZE      LWB_CONF_SCHED_MAX_QLEN_WNIDOW_SIZE
+#else
+#define LWB_SCHED_MAX_QLEN_WNIDOW_SIZE      5
+#endif
+
+#ifdef LWB_CONF_SCHED_DEFAULT_AVG_MAX_QLEN
+#define LWB_SCHED_DEFAULT_AVG_MAX_QLEN          LWB_CONF_SCHED_DEFAULT_AVG_MAX_QLEN
+#else
+#define LWB_SCHED_DEFAULT_AVG_MAX_QLEN          1
+#endif
+
 
 /// @}
 

@@ -56,14 +56,6 @@
 
 #define UIP_IP_BUF   ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
 
-#define TCP_SERVER_NODE_ID  13
-#define TCP_CLIENT_NODE_ID  2
-#define LWB_HOST_NODE_ID    1
-#define TCP_PORT            20222
-
-// These delays are from the boot of the node
-#define TCP_CLIENT_CONNECT_DELAY    60
-#define SOURCE_NODE_START_DELAY     20
 
 #define TCP_PAYLOAD_LEN_FRAG_1      70
 #define TCP_PAYLOAD_LEN_FRAG_2      170
@@ -75,8 +67,7 @@
 // If the total payload is greater than (127 - (1 (relay counter) + 1 (Glossy header) + 8 (LWB data header)),
 // 6LoWPAN fragmentation headers (4 (FAG_1) + 5 (FAG_N)) should also be considered.
 // NOTE the size of 6LoWPAN fragments should be multiples of 8
-
-#define TCP_PAYLOAD_LEN             TCP_PAYLOAD_LEN_FRAG_4
+#define TCP_PAYLOAD_LEN             TCP_PAYLOAD_LEN_FRAG_1
 
 enum {
   ECHO_MSG_TYPE_REQ = 0xBB,
@@ -120,6 +111,45 @@ uint32_t n_packets = 0;
 PROCESS(tcp_server_process, "TCP process");
 AUTOSTART_PROCESSES(&tcp_server_process);
 
+uint8_t is_server = 0;
+uint8_t is_client = 0;
+uint16_t client_start_time = 0;
+uint16_t server_node_id = 0;
+
+typedef struct {
+    uint16_t client;
+    uint16_t server;
+    uint16_t start_time;
+} tcp_client_server_t;
+
+#define TCP_PORT                    20222
+#define LWB_HOST_NODE_ID            1
+// These delays are from the boot of the node
+#define SOURCE_NODE_START_DELAY     15
+tcp_client_server_t clients_servers[] = {   {2, 13, 60},
+                                            {3, 10, 120},
+                                            {4, 11, 180},
+                                            {5, 12, 240},
+                                            {6, 14, 300}
+                                        };
+
+static void set_servers_and_clients() {
+    tcp_client_server_t* pair;
+    uint8_t i;
+
+    for (i = 0; i < sizeof(clients_servers)/sizeof(tcp_client_server_t); i++) {
+        pair = &clients_servers[i];
+
+        if (node_id == pair->client) {
+            is_client = 1;
+            client_start_time = pair->start_time;
+            server_node_id = pair->server;
+        } else if (node_id == pair->server) {
+            is_server = 1;
+        }
+    }
+}
+
 void send_stream_req() {
     if (((lwb_get_joining_state() == LWB_JOINING_STATE_NOT_JOINED) ||
          (lwb_get_joining_state() == LWB_JOINING_STATE_JOINED)) && 
@@ -147,7 +177,7 @@ void on_schedule_end(void) {
     t_con_now = lwb_get_host_time();
     n_packets += tcpstats_cnt;
 
-    if (node_id == TCP_CLIENT_NODE_ID && connected) {
+    if (is_client && connected) {
         printf("P|");
         for(; i < tcpstats_cnt; i++) {
             printf("%u-%lu ", tcpstats_info[i].seq, (tcpstats_info[i].lat * 1000 / RTIMER_SECOND));
@@ -158,7 +188,7 @@ void on_schedule_end(void) {
 
     tcpstats_cnt = 0;
 
-    if((node_id == TCP_SERVER_NODE_ID || node_id == TCP_CLIENT_NODE_ID) && connected) {
+    if((is_client || is_server) && connected) {
         printf("T|%u |%lu %lu\n", UIP_STAT(uip_stat.tcp.rexmit), (t_con_now - t_con_start), lwb_get_host_time());
     }
 
@@ -232,6 +262,7 @@ static PT_THREAD(client_handler())
     return PT_ENDED;
 }
 
+#if 0
 static void
 print_local_addresses(void)
 {
@@ -251,6 +282,7 @@ print_local_addresses(void)
         }
     }
 }
+#endif
 
 lwb_callbacks_t lwb_callbacks = {on_data, on_schedule_end};                                                                                                                       
 PROCESS_THREAD(tcp_server_process, ev, data)
@@ -292,56 +324,58 @@ PROCESS_THREAD(tcp_server_process, ev, data)
 
         lwb_init(LWB_MODE_SOURCE, &lwb_callbacks);
 
-        if (node_id == TCP_SERVER_NODE_ID || node_id == TCP_CLIENT_NODE_ID) {
-            
-            if (node_id == TCP_SERVER_NODE_ID) {
-                    
-                tcp_listen(UIP_HTONS(TCP_PORT));
-                
-            } else {
-                
-                etimer_set(&et, CLOCK_SECOND * (TCP_CLIENT_CONNECT_DELAY - SOURCE_NODE_START_DELAY));
+
+        set_servers_and_clients();
+
+        if (is_server) {
+            tcp_listen(UIP_HTONS(TCP_PORT));
+
+        } else if (is_client) {
+
+            while (client_start_time > lwb_get_host_time()) {
+                etimer_set(&et, CLOCK_SECOND);
                 PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-                
-                set_ipaddr_from_id(&global_ip_addr, TCP_SERVER_NODE_ID);
-                printf("connecting..\n");
-                tcp_connect(&global_ip_addr, UIP_HTONS(TCP_PORT), NULL);
             }
-    
+
+            set_ipaddr_from_id(&global_ip_addr, server_node_id);
+            printf("connecting..\n");
+            tcp_connect(&global_ip_addr, UIP_HTONS(TCP_PORT), NULL);
+        }
+
+
+        if (is_client || is_server) {
             while (1) {
-    
+
                 PROCESS_WAIT_EVENT_UNTIL(ev == tcpip_event);
-    
+
                 if (uip_connected()) {
 
-                    connected = 1; 
+                    connected = 1;
                     printf("connected\n");
                     PSOCK_INIT(&p_socket, (uint8_t *) &echo_msg_buf, sizeof(echo_msg_t));
-    
+
                     while(!(uip_aborted() || uip_closed() || uip_timedout())) {
-                        
+
                         PROCESS_YIELD();
-                        
-                        if (node_id == TCP_SERVER_NODE_ID && ev == tcpip_event) {
+
+                        if (is_server && ev == tcpip_event) {
                             server_handler();
-                        } else if (node_id == TCP_CLIENT_NODE_ID && ev == tcpip_event) {
+                        } else if (is_client && ev == tcpip_event) {
                             client_handler();
                         } else {
                             // Other event
                         }
                     }
-                    
+
                     printf("aborted|closed|timedout\n");
-                    
-                } else if (node_id == TCP_CLIENT_NODE_ID && 
+
+                } else if (is_client &&
                             (uip_aborted() || uip_closed() || uip_timedout())) {
-                                
+
                     printf("aborted|closed|timedout-reconnecting\n");
                     tcp_connect(&global_ip_addr, UIP_HTONS(TCP_PORT), NULL);
                 }
             }
-        } else {
-            // Other node id
         }
     }
 
